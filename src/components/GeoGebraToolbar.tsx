@@ -43,6 +43,7 @@ interface GeoGebraToolbarProps {
   onToggleSidebar: () => void;
   sidebarTab: 'algebra' | 'notebook' | 'problem';
   onSelectSidebarTab: (tab: 'algebra' | 'notebook' | 'problem') => void;
+  onOpenTheory: () => void;
   onOpenGuide: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
@@ -65,6 +66,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
   onToggleSidebar,
   sidebarTab,
   onSelectSidebarTab,
+  onOpenTheory,
   onOpenGuide,
   isDarkMode,
   onToggleDarkMode,
@@ -372,6 +374,16 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
             Problemas
           </button>
         </div>
+
+        {/* Botón Zona de Teoría (página completa) */}
+        <button
+          onClick={onOpenTheory}
+          title="Abrir Zona de Teoría completa (Fórmulas, Propiedades y Gráficos)"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-panel border border-border text-ink hover:border-accent hover:text-accent shadow-sm text-xs font-bold transition"
+        >
+          <BookOpen className="h-4 w-4 text-accent" />
+          <span>Teoría</span>
+        </button>
 
         {/* Botón Ocultar / Mostrar Panel Lateral */}
         <button

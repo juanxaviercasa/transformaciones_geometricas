@@ -63,6 +63,7 @@ import { GeoGebraToolbar } from './GeoGebraToolbar';
 import { AlgebraView } from './AlgebraView';
 import { AlgebraicNotebook } from './AlgebraicNotebook';
 import { InverseProblemPanel } from './InverseProblemPanel';
+import { TheoryPage } from './TheoryPage';
 import { InteractiveGuideModal } from './InteractiveGuideModal';
 import { PolygonPreview } from './PolygonPreview';
 import { SHAPE_PRESETS } from '../utils/transformations';
@@ -124,6 +125,7 @@ export function Workspace({
   // 5. PESTAÑAS DEL PANEL LATERAL RESPONSIVO
   const [sidebarTab, setSidebarTab] = useState<'algebra' | 'notebook' | 'problem'>('algebra');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isTheoryOpen, setIsTheoryOpen] = useState<boolean>(false);
 
   // 6. TOGGLES DE INSPECCIÓN
   const [toggles, setToggles] = useState<ClassroomToggles>({
@@ -1557,6 +1559,7 @@ export function Workspace({
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         sidebarTab={sidebarTab}
         onSelectSidebarTab={setSidebarTab}
+        onOpenTheory={() => setIsTheoryOpen(true)}
         isDarkMode={isDarkMode}
         onToggleDarkMode={() => setSettings(prev => ({ ...prev, isDarkMode: !prev.isDarkMode }))}
         onExportPNG={handleExportPNG}
@@ -1747,7 +1750,7 @@ export function Workspace({
           >
             <PanelRightOpen className="h-4 w-4 text-accent group-hover:scale-110 transition" />
             <span>
-              Abrir Panel ({sidebarTab === 'algebra' ? 'Álgebra' : sidebarTab === 'notebook' ? 'Cuaderno' : 'Problemas'})
+              Abrir Panel ({sidebarTab === 'algebra' ? 'Algebra' : sidebarTab === 'notebook' ? 'Cuaderno' : 'Problemas'})
             </span>
           </button>
         )}
@@ -1758,8 +1761,8 @@ export function Workspace({
             {/* Cabecera del panel con botón para ocultar */}
             <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border bg-panel/70">
               <span className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
-                {sidebarTab === 'algebra' && 'Vista Álgebra'}
-                {sidebarTab === 'notebook' && 'Cuaderno Analítico'}
+                {sidebarTab === 'algebra' && 'Vista Algebra'}
+                {sidebarTab === 'notebook' && 'Cuaderno Analitico'}
                 {sidebarTab === 'problem' && 'Problemas Inversos'}
               </span>
               <button
@@ -1806,6 +1809,7 @@ export function Workspace({
                   currentScenario={currentScenario}
                 />
               )}
+
             </div>
           </aside>
         )}
@@ -1963,6 +1967,14 @@ export function Workspace({
         onClose={() => setIsGuideOpen(false)}
         onLoadExample={handleLoadQuickTriangle}
       />
+
+      {/* PÁGINA COMPLETA DE TEORÍA */}
+      {isTheoryOpen && (
+        <TheoryPage
+          initialTransformation={config.type}
+          onClose={() => setIsTheoryOpen(false)}
+        />
+      )}
     </div>
   );
 }
