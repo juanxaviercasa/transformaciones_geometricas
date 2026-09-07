@@ -581,40 +581,201 @@ export default function App() {
         ctx.restore();
       }
 
-      // C) Rotación: Radios y arcos circulares
-      if (config.type === 'rotation' && engineResult.constructionElements.rotationArcs) {
+      // C) Rotación: Radios, arcos de trayectoria exacta, sector angular, símbolo de 90° y badge de ángulo
+      if (config.type === 'rotation' && engineResult.constructionElements.rotationArcs && engineResult.constructionElements.rotationArcs.length > 0) {
         ctx.save();
-        engineResult.constructionElements.rotationArcs.forEach((g, idx) => {
-          const cScr = toScreen(g.center, width, height);
+        const arcs = engineResult.constructionElements.rotationArcs;
+        const cScr = toScreen(config.center, width, height);
+        const isScreenCCW = config.direction === 'anticlockwise';
+
+        // 1. Dibujar trayectorias circulares para cada vértice (P -> P')
+        arcs.forEach((g, idx) => {
           const s = toScreen(g.p, width, height);
           const e = toScreen(g.pPrime, width, height);
+          const rPx = Math.hypot(s.x - cScr.x, s.y - cScr.y);
+          if (rPx < 5) return;
 
-          ctx.strokeStyle = '#fcd34d';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([3, 3]);
+          const sAng = Math.atan2(s.y - cScr.y, s.x - cScr.x);
+          const eAng = Math.atan2(e.y - cScr.y, e.x - cScr.x);
+
+          // Radios r desde el centro C hasta P y P'
           ctx.beginPath();
           ctx.moveTo(cScr.x, cScr.y);
           ctx.lineTo(s.x, s.y);
           ctx.moveTo(cScr.x, cScr.y);
           ctx.lineTo(e.x, e.y);
+          if (idx === 0) {
+            ctx.strokeStyle = 'rgba(217, 119, 6, 0.75)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+          } else {
+            ctx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 4]);
+          }
           ctx.stroke();
 
-          // Arco
-          ctx.strokeStyle = '#d97706';
-          ctx.lineWidth = 1.6;
+          // Arco de trayectoria circular exacto (con radio rPx real del vértice)
+          ctx.beginPath();
+          ctx.arc(cScr.x, cScr.y, rPx, sAng, eAng, isScreenCCW);
+          if (idx === 0) {
+            ctx.strokeStyle = '#d97706';
+            ctx.lineWidth = 1.8;
+            ctx.setLineDash([5, 3]);
+          } else {
+            ctx.strokeStyle = 'rgba(217, 119, 6, 0.45)';
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([3, 3]);
+          }
+          ctx.stroke();
+
+          // Flecha direccional en el punto de llegada e (P')
+          const tangAng = isScreenCCW ? eAng - Math.PI / 2 : eAng + Math.PI / 2;
+          const arrowLen = idx === 0 ? 8 : 6;
+          ctx.fillStyle = idx === 0 ? '#d97706' : 'rgba(217, 119, 6, 0.6)';
           ctx.setLineDash([]);
           ctx.beginPath();
-          const rPx = Math.hypot(s.x - cScr.x, s.y - cScr.y);
-          ctx.arc(
-            cScr.x,
-            cScr.y,
-            Math.min(rPx, 32 + idx * 8),
-            -g.startAngle,
-            -g.endAngle,
-            config.direction === 'clockwise'
+          ctx.moveTo(e.x, e.y);
+          ctx.lineTo(
+            e.x - arrowLen * Math.cos(tangAng - Math.PI / 6),
+            e.y - arrowLen * Math.sin(tangAng - Math.PI / 6)
           );
-          ctx.stroke();
+          ctx.lineTo(
+            e.x - arrowLen * Math.cos(tangAng + Math.PI / 6),
+            e.y - arrowLen * Math.sin(tangAng + Math.PI / 6)
+          );
+          ctx.closePath();
+          ctx.fill();
         });
+
+        // 2. Indicador Didáctico Central del Ángulo de Giro (En el vértice de referencia A)
+        const refArc = arcs[0];
+        const sRef = toScreen(refArc.p, width, height);
+        const eRef = toScreen(refArc.pPrime, width, height);
+        const rRef = Math.hypot(sRef.x - cScr.x, sRef.y - cScr.y);
+
+        if (rRef >= 10 && config.angleDeg > 0) {
+          const sAng = Math.atan2(sRef.y - cScr.y, sRef.x - cScr.x);
+          const eAng = Math.atan2(eRef.y - cScr.y, eRef.x - cScr.x);
+          const sectorR = Math.min(48, Math.max(30, rRef * 0.42));
+
+          // A) Sector sombreado translúcido entre rayo CA y rayo CA'
+          ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+          ctx.beginPath();
+          ctx.moveTo(cScr.x, cScr.y);
+          ctx.arc(cScr.x, cScr.y, sectorR, sAng, eAng, isScreenCCW);
+          ctx.closePath();
+          ctx.fill();
+
+          // B) Borde del arco del ángulo con línea continua nítida
+          ctx.strokeStyle = '#d97706';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.arc(cScr.x, cScr.y, sectorR, sAng, eAng, isScreenCCW);
+          ctx.stroke();
+
+          // Flecha en el arco del ángulo
+          const arcFrac = 0.85;
+          const arcArrowAng = isScreenCCW
+            ? sAng - ((config.angleDeg * Math.PI) / 180) * arcFrac
+            : sAng + ((config.angleDeg * Math.PI) / 180) * arcFrac;
+          const arcEndScr = {
+            x: cScr.x + sectorR * Math.cos(arcArrowAng),
+            y: cScr.y + sectorR * Math.sin(arcArrowAng)
+          };
+          const arcTang = isScreenCCW ? arcArrowAng - Math.PI / 2 : arcArrowAng + Math.PI / 2;
+          ctx.fillStyle = '#d97706';
+          ctx.beginPath();
+          ctx.moveTo(arcEndScr.x, arcEndScr.y);
+          ctx.lineTo(
+            arcEndScr.x - 6 * Math.cos(arcTang - Math.PI / 6),
+            arcEndScr.y - 6 * Math.sin(arcTang - Math.PI / 6)
+          );
+          ctx.lineTo(
+            arcEndScr.x - 6 * Math.cos(arcTang + Math.PI / 6),
+            arcEndScr.y - 6 * Math.sin(arcTang + Math.PI / 6)
+          );
+          ctx.closePath();
+          ctx.fill();
+
+          // C) Símbolo clásico de 90° (cuadradito perpendicular) si el ángulo es 90° o 270°
+          const isRightAngle = Math.abs(config.angleDeg % 180) === 90;
+          if (isRightAngle) {
+            const sqSize = 14;
+            const u1 = { x: Math.cos(sAng), y: Math.sin(sAng) };
+            const u2 = { x: Math.cos(eAng), y: Math.sin(eAng) };
+            const p1 = { x: cScr.x + sqSize * u1.x, y: cScr.y + sqSize * u1.y };
+            const pCorner = {
+              x: cScr.x + sqSize * (u1.x + u2.x),
+              y: cScr.y + sqSize * (u1.y + u2.y)
+            };
+            const p2 = { x: cScr.x + sqSize * u2.x, y: cScr.y + sqSize * u2.y };
+
+            ctx.strokeStyle = '#b45309';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(pCorner.x, pCorner.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+
+            // Pequeño punto interior del ángulo recto
+            ctx.fillStyle = '#b45309';
+            ctx.beginPath();
+            ctx.arc(
+              cScr.x + sqSize * 0.55 * (u1.x + u2.x),
+              cScr.y + sqSize * 0.55 * (u1.y + u2.y),
+              1.6,
+              0,
+              Math.PI * 2
+            );
+            ctx.fill();
+          }
+
+          // D) Placa / Badge Prominente del Ángulo (p. ej. "α = 90° ↺")
+          const cartStartAng = Math.atan2(refArc.p.y - config.center.y, refArc.p.x - config.center.x);
+          const deltaAng = (config.direction === 'clockwise' ? -1 : 1) * ((config.angleDeg * Math.PI) / 180);
+          const cartBisector = cartStartAng + deltaAng / 2;
+          const screenBisector = -cartBisector;
+
+          const badgeDist = sectorR + 26;
+          const badgeX = cScr.x + badgeDist * Math.cos(screenBisector);
+          const badgeY = cScr.y + badgeDist * Math.sin(screenBisector);
+
+          const dirSymbol = config.direction === 'anticlockwise' ? '↺' : '↻';
+          const badgeText = `α = ${config.angleDeg}° ${dirSymbol}`;
+
+          ctx.font = 'bold 12px "Inter", sans-serif';
+          const tMetrics = ctx.measureText(badgeText);
+          const bW = tMetrics.width + 16;
+          const bH = 22;
+
+          // Dibujar cápsula con sombra
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+          ctx.shadowBlur = 6;
+          ctx.shadowOffsetY = 2;
+          ctx.fillStyle = '#fffbeb';
+          ctx.strokeStyle = '#d97706';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(badgeX - bW / 2, badgeY - bH / 2, bW, bH, 11);
+          } else {
+            ctx.rect(badgeX - bW / 2, badgeY - bH / 2, bW, bH);
+          }
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+
+          // Texto nítido del ángulo
+          ctx.fillStyle = '#78350f';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(badgeText, badgeX, badgeY);
+        }
+
         ctx.restore();
       }
 
@@ -714,20 +875,35 @@ export default function App() {
         const ly = pScr.y + (dy / distC) * labelDist;
 
         if (showLabels) {
-          const baseName = pt.label || String.fromCharCode(65 + i);
-          const labelText = `${baseName}${isTransformed ? "'" : ''} (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
+          const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
+          const primeSuffix = isTransformed ? "'" : '';
+          const labelText = `${cleanName}${primeSuffix} (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
 
           ctx.font = 'bold 11px "Inter", -apple-system, sans-serif';
-          ctx.textAlign = dx >= 0 ? 'left' : 'right';
+          const textWidth = ctx.measureText(labelText).width;
+
+          // Protección contra corte de texto en los márgenes de la pantalla
+          let align: CanvasTextAlign = dx >= 0 ? 'left' : 'right';
+          let targetLx = lx;
+          if (align === 'right' && lx - textWidth < 8) {
+            align = 'left';
+            targetLx = pScr.x + 10;
+          } else if (align === 'left' && lx + textWidth > width - 8) {
+            align = 'right';
+            targetLx = pScr.x - 10;
+          }
+
+          const targetLy = Math.max(16, Math.min(height - 12, ly));
+          ctx.textAlign = align;
           ctx.textBaseline = dy >= 0 ? 'top' : 'bottom';
 
           // Halo blanco anti-obstrucción estilo GeoGebra
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
           ctx.lineWidth = 3.5;
-          ctx.strokeText(labelText, lx, ly);
+          ctx.strokeText(labelText, targetLx, targetLy);
 
           ctx.fillStyle = '#0f172a';
-          ctx.fillText(labelText, lx, ly);
+          ctx.fillText(labelText, targetLx, targetLy);
         }
       });
     };

@@ -124,7 +124,11 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
       {/* 2. SECCIÓN: ELEMENTO RECTOR / PARÁMETROS DE LA TRANSFORMACIÓN */}
       <div className="space-y-2 pt-2 border-t border-border">
         <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-          Parámetros de {config.type.toUpperCase()}
+          {config.type === 'rotation' && 'Parámetros de Rotación'}
+          {config.type === 'reflection' && 'Parámetros de Simetría Axial'}
+          {config.type === 'translation' && 'Parámetros de Traslación'}
+          {config.type === 'homothety' && 'Parámetros de Homotecia'}
+          {config.type === 'central_reflection' && 'Parámetros de Simetría Central'}
         </span>
 
         {config.type === 'translation' && (
@@ -167,25 +171,9 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
         )}
 
         {config.type === 'reflection' && (
-          <div className="p-3 rounded-xl bg-panel border border-border space-y-2">
-            <div className="flex justify-between font-mono text-xs text-rose-600 font-bold">
-              <span>Recta L:</span>
-              <span>
-                {config.reflectionAxis === 'x'
-                  ? 'y = 0'
-                  : config.reflectionAxis === 'y'
-                  ? 'x = 0'
-                  : config.reflectionAxis === 'y=x'
-                  ? 'y = x'
-                  : config.reflectionAxis === 'y=-x'
-                  ? 'y = -x'
-                  : config.reflectionAxis === 'custom_x'
-                  ? `x = ${config.customAxisValue}`
-                  : `y = ${config.customAxisValue}`}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-1 pt-1 font-sans">
+          <div className="p-3 rounded-xl bg-panel border border-border space-y-2 font-sans text-xs">
+            <span className="text-ink-soft block font-medium">Eje de Reflexión L:</span>
+            <div className="grid grid-cols-3 gap-1">
               {(
                 [
                   { id: 'x', label: 'Eje X' },
@@ -237,32 +225,97 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
         )}
 
         {config.type === 'rotation' && (
-          <div className="p-3 rounded-xl bg-panel border border-border space-y-2 font-mono text-xs">
-            <div className="flex justify-between font-semibold text-amber-600">
-              <span>Ángulo α:</span>
-              <span>{config.angleDeg}°</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="360"
-              step="15"
-              value={config.angleDeg}
-              onChange={(e) =>
-                onUpdateConfig((prev) => ({ ...prev, angleDeg: parseInt(e.target.value) }))
-              }
-              className="w-full accent-amber-500"
-            />
-            <div className="flex justify-between items-center pt-1 font-sans">
-              <span className="text-ink-soft">Centro C:</span>
-              <span className="font-mono text-amber-700 font-bold">
-                ({config.center.x}, {config.center.y})
+          <div className="p-3 rounded-xl bg-panel border border-border space-y-3 font-mono text-xs">
+            <div className="flex justify-between items-center font-semibold text-amber-600">
+              <span className="flex items-center gap-1.5 font-sans font-bold text-ink">
+                <RotateCw className="h-3.5 w-3.5 text-amber-600" /> Ángulo de Giro (α):
               </span>
+              <span className="text-sm font-bold bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-300 text-amber-900 shadow-sm">
+                {config.angleDeg}°
+              </span>
+            </div>
+
+            {/* Selector de Sentido de Giro */}
+            <div className="grid grid-cols-2 gap-1.5 font-sans">
+              <button
+                onClick={() => onUpdateConfig((prev) => ({ ...prev, direction: 'anticlockwise' }))}
+                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold border transition ${
+                  config.direction === 'anticlockwise'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                    : 'bg-surface text-ink border-border hover:bg-black/5'
+                }`}
+              >
+                <span>↺</span> Antihorario (+)
+              </button>
+              <button
+                onClick={() => onUpdateConfig((prev) => ({ ...prev, direction: 'clockwise' }))}
+                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold border transition ${
+                  config.direction === 'clockwise'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                    : 'bg-surface text-ink border-border hover:bg-black/5'
+                }`}
+              >
+                <span>↻</span> Horario (-)
+              </button>
+            </div>
+
+            {/* Botones de ángulos escolares directos */}
+            <div className="space-y-1 font-sans">
+              <span className="text-[10px] text-ink-soft">Ángulos frecuentes:</span>
+              <div className="grid grid-cols-5 gap-1">
+                {[90, 180, 270, 45, 60].map((deg) => (
+                  <button
+                    key={deg}
+                    onClick={() => onUpdateConfig((prev) => ({ ...prev, angleDeg: deg }))}
+                    className={`py-1 rounded text-[11px] font-bold border transition ${
+                      config.angleDeg === deg
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                        : 'bg-surface text-ink-soft hover:text-ink border-border'
+                    }`}
+                  >
+                    {deg}°
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Slider de ángulo */}
+            <div className="space-y-1">
+              <input
+                type="range"
+                min="0"
+                max="360"
+                step="5"
+                value={config.angleDeg}
+                onChange={(e) =>
+                  onUpdateConfig((prev) => ({ ...prev, angleDeg: parseInt(e.target.value) }))
+                }
+                className="w-full accent-amber-500 cursor-pointer"
+              />
+              <div className="flex justify-between text-[9px] text-ink-faint font-sans px-0.5">
+                <span>0°</span>
+                <span>90°</span>
+                <span>180°</span>
+                <span>270°</span>
+                <span>360°</span>
+              </div>
+            </div>
+
+            {/* Centro de rotación C */}
+            <div className="flex justify-between items-center pt-2 border-t border-border/80 font-sans">
+              <div className="flex items-center gap-1.5">
+                <Target className="h-3.5 w-3.5 text-amber-600" />
+                <span className="text-ink-soft text-xs">Centro C:</span>
+                <span className="font-mono text-amber-700 font-bold text-xs">
+                  ({config.center.x}, {config.center.y})
+                </span>
+              </div>
               <button
                 onClick={() => onSetTool('pivot')}
-                className="px-2 py-0.5 text-[11px] rounded bg-surface border border-border hover:border-amber-500"
+                title="Hacer clic en la pizarra para fijar un nuevo centro de giro"
+                className="px-2.5 py-1 text-xs rounded-lg bg-surface border border-border hover:border-amber-500 hover:text-amber-700 font-semibold transition"
               >
-                Mover
+                Fijar en Pizarra
               </button>
             </div>
           </div>
