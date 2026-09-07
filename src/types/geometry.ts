@@ -6,7 +6,7 @@ export interface Point {
 
 export type GridStyle = 'lines' | 'dots' | 'axes';
 
-export type ToolMode = 'select' | 'pan' | 'draw' | 'pivot';
+export type ToolMode = 'select' | 'pan' | 'point' | 'polygon' | 'draw' | 'pivot';
 
 export type ProblemMode = 'DIRECT' | 'INVERSE';
 
