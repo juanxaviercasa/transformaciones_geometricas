@@ -58,6 +58,7 @@ import { GeoGebraToolbar } from './components/GeoGebraToolbar';
 import { AlgebraView } from './components/AlgebraView';
 import { AlgebraicNotebook } from './components/AlgebraicNotebook';
 import { InverseProblemPanel } from './components/InverseProblemPanel';
+import { InteractiveGuideModal } from './components/InteractiveGuideModal';
 import { SHAPE_PRESETS } from './utils/transformations';
 
 export default function App() {
@@ -114,6 +115,7 @@ export default function App() {
   // 8. MODALES
   const [isCoordsModalOpen, setIsCoordsModalOpen] = useState(false);
   const [isPresetsOpen, setIsPresetsOpen] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [coordsInputText, setCoordsInputText] = useState('1, 1\n4, 2\n2, 5');
 
   // 9. CURSOR Y ARRASTRE
@@ -948,6 +950,7 @@ export default function App() {
         onSelectTransformation={(type) => setConfig((prev) => ({ ...prev, type }))}
         onClearCanvas={handleClearCanvas}
         onOpenPresets={() => setIsPresetsOpen(true)}
+        onOpenGuide={() => setIsGuideOpen(true)}
         onUndo={handleUndo}
         canUndo={vertices.length > 0}
         isCleanBoard={cleanBoardMode}
@@ -1020,35 +1023,6 @@ export default function App() {
                 : 'cursor-default'
             }`}
           />
-
-          {/* BANNER DE INICIO LIMPIO (SOLO CUANDO NO HAY VÉRTICES) */}
-          {vertices.length === 0 && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-3 p-6 rounded-3xl bg-surface/95 border border-border shadow-2xl backdrop-blur-md text-center max-w-sm">
-              <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-indigo-50 text-accent">
-                <Hexagon className="h-6 w-6" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-ink">Pizarra Limpia Lista</h3>
-                <p className="text-xs text-ink-soft mt-1 leading-relaxed">
-                  Comienza trazando puntos con el ratón o inserta una figura base para experimentar.
-                </p>
-              </div>
-              <div className="flex gap-2 w-full pt-1">
-                <button
-                  onClick={handleLoadQuickTriangle}
-                  className="flex-1 py-2 px-3 rounded-xl bg-accent text-white font-semibold text-xs hover:brightness-110 transition shadow-sm"
-                >
-                  Triángulo Base
-                </button>
-                <button
-                  onClick={() => setIsPresetsOpen(true)}
-                  className="flex-1 py-2 px-3 rounded-xl bg-panel border border-border text-ink font-semibold text-xs hover:bg-border transition"
-                >
-                  Ver Modelos
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* HUD FLOTANTE DE COORDENADAS */}
           {mouseCoord && (
@@ -1212,6 +1186,13 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* MODAL DE GUÍA INTERACTIVA DE USO */}
+      <InteractiveGuideModal
+        isOpen={isGuideOpen}
+        onClose={() => setIsGuideOpen(false)}
+        onLoadExample={handleLoadQuickTriangle}
+      />
     </div>
   );
 }

@@ -36,6 +36,7 @@ interface GeoGebraToolbarProps {
   onToggleSidebar: () => void;
   sidebarTab: 'algebra' | 'notebook' | 'problem';
   onSelectSidebarTab: (tab: 'algebra' | 'notebook' | 'problem') => void;
+  onOpenGuide: () => void;
 }
 
 export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
@@ -52,7 +53,8 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
   isSidebarOpen,
   onToggleSidebar,
   sidebarTab,
-  onSelectSidebarTab
+  onSelectSidebarTab,
+  onOpenGuide
 }) => {
   const [isTransformMenuOpen, setIsTransformMenuOpen] = useState(false);
 
@@ -201,7 +203,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           </div>
         </div>
 
-        {/* ACCIONES RÁPIDAS: MODELOS Y LIMPIAR */}
+        {/* ACCIONES RÁPIDAS: MODELOS, LIMPIAR Y GUÍA */}
         <div className="flex items-center gap-1">
           <button
             onClick={onOpenPresets}
@@ -210,6 +212,15 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           >
             <Shapes className="h-3.5 w-3.5 text-accent" />
             <span className="hidden sm:inline">Modelos</span>
+          </button>
+
+          <button
+            onClick={onOpenGuide}
+            title="Guía Interactiva de Uso"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20 transition"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Guía de Uso</span>
           </button>
 
           <button
