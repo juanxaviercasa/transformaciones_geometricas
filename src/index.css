@@ -24,6 +24,25 @@
   --color-ok: #10b981;
 }
 
+.dark {
+  --color-paper: #090d16;
+  --color-surface: #0f172a;
+  --color-panel: #1e293b;
+  --color-rail: #020617;
+  --color-rail-2: #0b0f19;
+  --color-rail-line: #1e293b;
+  --color-ink: #f8fafc;
+  --color-ink-soft: #94a3b8;
+  --color-ink-faint: #64748b;
+  --color-on-rail: #f8fafc;
+  --color-on-rail-soft: #94a3b8;
+  --color-border: #334155;
+  --color-border-strong: #475569;
+  --color-accent: #6366f1;
+  --color-accent-soft: #1e1b4b;
+  --color-ok: #10b981;
+}
+
 html, body, #root {
   height: 100%;
   margin: 0;

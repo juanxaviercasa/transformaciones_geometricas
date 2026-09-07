@@ -17,9 +17,14 @@ import {
   HelpCircle,
   Sparkles,
   ChevronDown,
-  Target
+  Target,
+  Sun,
+  Moon,
+  PanelRightClose,
+  PanelRightOpen
 } from 'lucide-react';
 import { ToolMode, TransformationType } from '../types/geometry';
+import { BrandLogo } from './BrandLogo';
 
 interface GeoGebraToolbarProps {
   activeTool: ToolMode;
@@ -37,6 +42,8 @@ interface GeoGebraToolbarProps {
   sidebarTab: 'algebra' | 'notebook' | 'problem';
   onSelectSidebarTab: (tab: 'algebra' | 'notebook' | 'problem') => void;
   onOpenGuide: () => void;
+  isDarkMode: boolean;
+  onToggleDarkMode: () => void;
 }
 
 export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
@@ -54,7 +61,9 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
   onToggleSidebar,
   sidebarTab,
   onSelectSidebarTab,
-  onOpenGuide
+  onOpenGuide,
+  isDarkMode,
+  onToggleDarkMode
 }) => {
   const [isTransformMenuOpen, setIsTransformMenuOpen] = useState(false);
 
@@ -90,21 +99,9 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
 
   return (
     <header className="relative z-40 flex items-center justify-between px-3 py-1.5 bg-surface border-b border-border shadow-sm select-none">
-      {/* 1. BRANDING ESTILO GEOGEBRA */}
+      {/* 1. BRANDING PROPIO: GEOTRANSFORM PRO */}
       <div className="flex items-center gap-2.5">
-        <div className="flex items-center gap-2">
-          {/* Logo tipo GeoGebra de 5 puntos geométricos */}
-          <div className="flex items-center justify-center h-8 w-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-500 text-white shadow-sm shadow-indigo-200">
-            <Hexagon className="h-4 w-4" />
-          </div>
-          <div className="hidden lg:block">
-            <h1 className="text-xs font-black tracking-tight text-ink flex items-center gap-1.5">
-              GeoGebra <span className="text-accent font-semibold">Transformaciones</span>
-            </h1>
-            <p className="text-[10px] text-ink-soft">Pizarra & Geometría Dinámica</p>
-          </div>
-        </div>
-
+        <BrandLogo />
         <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
 
         {/* 2. BARRA DE HERRAMIENTAS GEOMÉTRICAS (TOOLBAR) */}
@@ -243,15 +240,20 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
         </div>
       </div>
 
-      {/* 3. LADO DERECHO: PESTAÑAS Y CONTROL DE VISTA */}
-      <div className="flex items-center gap-2">
-        {/* Selector de Pestañas GeoGebra */}
+      {/* 3. LADO DERECHO: PESTAÑAS, MODO OSCURO Y CONTROL DE VISTA */}
+      <div className="flex items-center gap-1.5">
+        {/* Selector de Pestañas GeoTransform */}
         <div className="flex rounded-xl bg-panel p-1 border border-border">
           <button
             onClick={() => {
-              onSelectSidebarTab('algebra');
-              if (!isSidebarOpen) onToggleSidebar();
+              if (isSidebarOpen && sidebarTab === 'algebra') {
+                onToggleSidebar();
+              } else {
+                onSelectSidebarTab('algebra');
+                if (!isSidebarOpen) onToggleSidebar();
+              }
             }}
+            title={isSidebarOpen && sidebarTab === 'algebra' ? 'Clic para ocultar panel' : 'Ver Álgebra'}
             className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
               isSidebarOpen && sidebarTab === 'algebra'
                 ? 'bg-surface text-accent shadow-sm'
@@ -262,9 +264,14 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           </button>
           <button
             onClick={() => {
-              onSelectSidebarTab('notebook');
-              if (!isSidebarOpen) onToggleSidebar();
+              if (isSidebarOpen && sidebarTab === 'notebook') {
+                onToggleSidebar();
+              } else {
+                onSelectSidebarTab('notebook');
+                if (!isSidebarOpen) onToggleSidebar();
+              }
             }}
+            title={isSidebarOpen && sidebarTab === 'notebook' ? 'Clic para ocultar panel' : 'Ver Cuaderno'}
             className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
               isSidebarOpen && sidebarTab === 'notebook'
                 ? 'bg-surface text-accent shadow-sm'
@@ -275,18 +282,49 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           </button>
           <button
             onClick={() => {
-              onSelectSidebarTab('problem');
-              if (!isSidebarOpen) onToggleSidebar();
+              if (isSidebarOpen && sidebarTab === 'problem') {
+                onToggleSidebar();
+              } else {
+                onSelectSidebarTab('problem');
+                if (!isSidebarOpen) onToggleSidebar();
+              }
             }}
+            title={isSidebarOpen && sidebarTab === 'problem' ? 'Clic para ocultar panel' : 'Ver Problemas Inversos'}
             className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
               isSidebarOpen && sidebarTab === 'problem'
-                ? 'bg-surface text-emerald-700 shadow-sm'
+                ? 'bg-surface text-emerald-700 dark:text-emerald-400 shadow-sm'
                 : 'text-ink-soft hover:text-ink'
             }`}
           >
             Problemas
           </button>
         </div>
+
+        {/* Botón Ocultar / Mostrar Panel Lateral */}
+        <button
+          onClick={onToggleSidebar}
+          title={isSidebarOpen ? 'Ocultar panel lateral (Área máxima de lienzo)' : 'Mostrar panel lateral'}
+          className={`p-2 rounded-xl border transition ${
+            isSidebarOpen
+              ? 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
+              : 'bg-panel border-border text-ink-soft hover:text-ink'
+          }`}
+        >
+          {isSidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+        </button>
+
+        {/* Botón Modo Oscuro / Modo Claro */}
+        <button
+          onClick={onToggleDarkMode}
+          title={isDarkMode ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+          className="p-2 rounded-xl bg-panel border border-border text-ink hover:text-accent hover:border-accent transition flex items-center justify-center"
+        >
+          {isDarkMode ? (
+            <Sun className="h-4 w-4 text-amber-400 animate-in spin-in-180 duration-200" />
+          ) : (
+            <Moon className="h-4 w-4 text-slate-600 hover:text-indigo-600 animate-in spin-in-180 duration-200" />
+          )}
+        </button>
 
         {/* Alternar Pantalla Completa Limpia */}
         <button

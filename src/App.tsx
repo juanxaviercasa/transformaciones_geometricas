@@ -35,7 +35,11 @@ import {
   Maximize,
   Minimize,
   Plus,
-  Info
+  Info,
+  Sun,
+  Moon,
+  PanelRightClose,
+  PanelRightOpen
 } from 'lucide-react';
 import {
   Point,
@@ -117,6 +121,26 @@ export default function App() {
   const [isPresetsOpen, setIsPresetsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [coordsInputText, setCoordsInputText] = useState('1, 1\n4, 2\n2, 5');
+
+  // 9. MODO OSCURO / MODO CLARO
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('geotransform_theme');
+      if (saved) return saved === 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('geotransform_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('geotransform_theme', 'light');
+    }
+  }, [isDarkMode]);
 
   // 9. CURSOR Y ARRASTRE
   const [mouseCoord, setMouseCoord] = useState<{ x: number; y: number } | null>(null);
@@ -254,8 +278,8 @@ export default function App() {
     const width = rect.width;
     const height = rect.height;
 
-    // Fondo blanco nítido estilo GeoGebra
-    ctx.fillStyle = '#ffffff';
+    // Fondo del lienzo dependiente del modo oscuro/claro
+    ctx.fillStyle = isDarkMode ? '#0b0f19' : '#ffffff';
     ctx.fillRect(0, 0, width, height);
 
     const originX = width / 2 + pan.x;
@@ -271,7 +295,7 @@ export default function App() {
       // Líneas menores (subcuadrícula)
       if (scale > 30) {
         ctx.lineWidth = 0.5;
-        ctx.strokeStyle = '#f1f5f9';
+        ctx.strokeStyle = isDarkMode ? '#141d2e' : '#f1f5f9';
         ctx.beginPath();
         for (let u = minUnitX * 5; u <= maxUnitX * 5; u++) {
           if (u % 5 === 0) continue;
@@ -290,7 +314,7 @@ export default function App() {
 
       // Líneas mayores
       ctx.lineWidth = 1;
-      ctx.strokeStyle = '#e2e8f0';
+      ctx.strokeStyle = isDarkMode ? '#1e293b' : '#e2e8f0';
       ctx.beginPath();
       for (let u = minUnitX; u <= maxUnitX; u++) {
         const sx = originX + u * scale;
@@ -304,7 +328,7 @@ export default function App() {
       }
       ctx.stroke();
     } else if (gridStyle === 'dots') {
-      ctx.fillStyle = '#cbd5e1';
+      ctx.fillStyle = isDarkMode ? '#334155' : '#cbd5e1';
       for (let ux = minUnitX; ux <= maxUnitX; ux++) {
         for (let uy = minUnitY; uy <= maxUnitY; uy++) {
           const sx = originX + ux * scale;
@@ -316,10 +340,12 @@ export default function App() {
       }
     }
 
-    // 2. EJES COORDENADOS (X e Y) CON FLECHAS GEOGEBRA
+    // 2. EJES COORDENADOS (X e Y) CON FLECHAS
+    const axisLineColor = isDarkMode ? '#475569' : '#334155';
+    const axisLabelColor = isDarkMode ? '#94a3b8' : '#64748b';
     ctx.lineWidth = 1.8;
-    ctx.strokeStyle = '#334155';
-    ctx.fillStyle = '#64748b';
+    ctx.strokeStyle = axisLineColor;
+    ctx.fillStyle = axisLabelColor;
     ctx.font = '11px "Inter", -apple-system, sans-serif';
 
     // Eje X
@@ -329,7 +355,7 @@ export default function App() {
     ctx.stroke();
 
     // Flecha Eje X (+X)
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = axisLineColor;
     ctx.beginPath();
     ctx.moveTo(width - 2, originY);
     ctx.lineTo(width - 10, originY - 4);
@@ -355,14 +381,14 @@ export default function App() {
     const step = scale < 22 ? 5 : scale < 35 ? 2 : 1;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = axisLabelColor;
     for (let u = minUnitX; u <= maxUnitX; u++) {
       if (u === 0 || u % step !== 0) continue;
       const sx = originX + u * scale;
       ctx.beginPath();
       ctx.moveTo(sx, originY - 3);
       ctx.lineTo(sx, originY + 3);
-      ctx.strokeStyle = '#64748b';
+      ctx.strokeStyle = axisLabelColor;
       ctx.stroke();
       ctx.fillText(u.toString(), sx, originY + 5);
     }
@@ -376,13 +402,13 @@ export default function App() {
       ctx.beginPath();
       ctx.moveTo(originX - 3, sy);
       ctx.lineTo(originX + 3, sy);
-      ctx.strokeStyle = '#64748b';
+      ctx.strokeStyle = axisLabelColor;
       ctx.stroke();
       ctx.fillText(u.toString(), originX - 6, sy);
     }
 
     // Origen O(0,0)
-    ctx.fillStyle = '#475569';
+    ctx.fillStyle = isDarkMode ? '#94a3b8' : '#475569';
     ctx.font = 'italic bold 11px serif';
     ctx.fillText('O', originX - 7, originY + 7);
 
@@ -897,51 +923,55 @@ export default function App() {
           ctx.textAlign = align;
           ctx.textBaseline = dy >= 0 ? 'top' : 'bottom';
 
-          // Halo blanco anti-obstrucción estilo GeoGebra
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+          // Halo blanco/oscuro anti-obstrucción
+          ctx.strokeStyle = isDarkMode ? '#0b0f19' : 'rgba(255, 255, 255, 0.9)';
           ctx.lineWidth = 3.5;
           ctx.strokeText(labelText, targetLx, targetLy);
 
-          ctx.fillStyle = '#0f172a';
+          ctx.fillStyle = isDarkMode ? '#f8fafc' : '#0f172a';
           ctx.fillText(labelText, targetLx, targetLy);
         }
       });
     };
 
-    // 6. DIBUJAR FIGURA TRANSFORMADA F' (GeoGebra Violet `#7B1FA2`)
+    // 6. DIBUJAR FIGURA TRANSFORMADA F' (GeoGebra Violet `#7B1FA2` o Neon `#C084FC`)
+    const transStroke = isDarkMode ? '#c084fc' : '#7b1fa2';
+    const transFill = isDarkMode ? 'rgba(192, 132, 252, 0.2)' : 'rgba(123, 31, 162, 0.12)';
     if (transformedVertices.length >= 2) {
       drawGeoGebraPolygon(
         transformedVertices,
-        '#7b1fa2',
-        'rgba(123, 31, 162, 0.12)',
+        transStroke,
+        transFill,
         true
       );
     } else if (transformedVertices.length === 1) {
       const p = toScreen(transformedVertices[0], width, height);
       ctx.beginPath();
       ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = '#7b1fa2';
+      ctx.fillStyle = transStroke;
       ctx.fill();
     }
 
-    // 7. DIBUJAR FIGURA PREIMAGEN F (GeoGebra Blue `#1565C0`)
+    // 7. DIBUJAR FIGURA PREIMAGEN F (GeoGebra Blue `#1565C0` o Neon `#38BDF8`)
+    const preStroke = isDarkMode ? '#38bdf8' : '#1565c0';
+    const preFill = isDarkMode ? 'rgba(56, 189, 248, 0.2)' : 'rgba(21, 101, 192, 0.14)';
     if (vertices.length >= 2) {
       drawGeoGebraPolygon(
         vertices,
-        '#1565c0',
-        'rgba(21, 101, 192, 0.14)',
+        preStroke,
+        preFill,
         false
       );
     } else if (vertices.length === 1) {
       const p = toScreen(vertices[0], width, height);
       ctx.beginPath();
       ctx.arc(p.x, p.y, 5.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#1565c0';
+      ctx.fillStyle = preStroke;
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = isDarkMode ? '#f8fafc' : '#0f172a';
       ctx.fillText(`${vertices[0].label || 'A'} (${vertices[0].x}, ${vertices[0].y})`, p.x + 8, p.y - 8);
     }
   }, [
@@ -957,7 +987,8 @@ export default function App() {
     toScreen,
     activePivot,
     hoveredVertexIndex,
-    isHoveringPivot
+    isHoveringPivot,
+    isDarkMode
   ]);
 
   // MANEJO DE EVENTOS DEL RATÓN EN EL LIENZO
@@ -1107,11 +1138,11 @@ export default function App() {
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 15px "Inter", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('GeoGebra Transformaciones • Pizarra Analítica', 20, 30);
+    ctx.fillText('GeoTransform Pro • Laboratorio de Geometría Dinámica', 20, 30);
 
     const dataUrl = exportCanvas.toDataURL('image/png');
     const link = document.createElement('a');
-    link.download = `geogebra_${config.type}_${Date.now()}.png`;
+    link.download = `geotransform_${config.type}_${Date.now()}.png`;
     link.href = dataUrl;
     link.click();
   };
@@ -1135,6 +1166,8 @@ export default function App() {
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         sidebarTab={sidebarTab}
         onSelectSidebarTab={setSidebarTab}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={() => setIsDarkMode((prev) => !prev)}
       />
 
       {/* 2. SUB-BARRA DE INSTRUCCIONES CONTEXTUALES GEOGEBRA */}
@@ -1252,32 +1285,65 @@ export default function App() {
           </div>
         </div>
 
+        {/* BOTÓN FLOTANTE PARA REABRIR PANEL CUANDO ESTÁ OCULTO */}
+        {!isSidebarOpen && !cleanBoardMode && (
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            title="Mostrar panel lateral"
+            className="absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-2 rounded-2xl bg-surface/90 border border-border shadow-xl backdrop-blur-md text-xs font-bold text-ink hover:text-accent hover:border-accent transition group animate-in fade-in"
+          >
+            <PanelRightOpen className="h-4 w-4 text-accent group-hover:scale-110 transition" />
+            <span>
+              Abrir Panel ({sidebarTab === 'algebra' ? 'Álgebra' : sidebarTab === 'notebook' ? 'Cuaderno' : 'Problemas'})
+            </span>
+          </button>
+        )}
+
         {/* PANEL LATERAL RESPONSIVO (VISTA ÁLGEBRA / CUADERNO / PROBLEMAS) */}
         {!cleanBoardMode && isSidebarOpen && (
           <aside className="w-[380px] h-full bg-surface border-l border-border shadow-2xl flex flex-col z-30 animate-in slide-in-from-right duration-150">
-            {sidebarTab === 'algebra' && (
-              <AlgebraView
-                vertices={vertices}
-                onUpdateVertices={setVertices}
-                transformedVertices={transformedVertices}
-                config={config}
-                onUpdateConfig={setConfig}
-                onSetTool={setTool}
-                onOpenCoordsModal={() => setIsCoordsModalOpen(true)}
-              />
-            )}
+            {/* Cabecera del panel con botón para ocultar */}
+            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border bg-panel/70">
+              <span className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                {sidebarTab === 'algebra' && 'Vista Álgebra'}
+                {sidebarTab === 'notebook' && 'Cuaderno Analítico'}
+                {sidebarTab === 'problem' && 'Problemas Inversos'}
+              </span>
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                title="Ocultar barra lateral"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-ink-soft hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 transition"
+              >
+                <span>Ocultar</span>
+                <PanelRightClose className="h-3.5 w-3.5" />
+              </button>
+            </div>
 
-            {sidebarTab === 'notebook' && (
-              <AlgebraicNotebook engineResult={engineResult} />
-            )}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {sidebarTab === 'algebra' && (
+                <AlgebraView
+                  vertices={vertices}
+                  onUpdateVertices={setVertices}
+                  transformedVertices={transformedVertices}
+                  config={config}
+                  onUpdateConfig={setConfig}
+                  onSetTool={setTool}
+                  onOpenCoordsModal={() => setIsCoordsModalOpen(true)}
+                />
+              )}
 
-            {sidebarTab === 'problem' && (
-              <InverseProblemPanel
-                preimage={vertices}
-                image={transformedVertices}
-                currentScenario={currentScenario}
-              />
-            )}
+              {sidebarTab === 'notebook' && (
+                <AlgebraicNotebook engineResult={engineResult} />
+              )}
+
+              {sidebarTab === 'problem' && (
+                <InverseProblemPanel
+                  preimage={vertices}
+                  image={transformedVertices}
+                  currentScenario={currentScenario}
+                />
+              )}
+            </div>
           </aside>
         )}
       </div>
