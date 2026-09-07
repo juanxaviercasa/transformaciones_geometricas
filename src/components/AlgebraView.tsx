@@ -2,7 +2,8 @@ import React from 'react';
 import {
   Point,
   TransformationConfig,
-  ReflectionAxis
+  ReflectionAxis,
+  ClassroomToggles
 } from '../types/geometry';
 import {
   formatNum,
@@ -19,31 +20,56 @@ import {
   Move,
   FlipHorizontal,
   RotateCw,
-  Maximize2
+  Maximize2,
+  Ruler,
+  Hexagon,
+  Link2,
+  Unlink,
+  Layers
 } from 'lucide-react';
 
 interface AlgebraViewProps {
   vertices: Point[];
   onUpdateVertices: (pts: Point[]) => void;
+  segments: [number, number][];
+  onUpdateSegments: (segs: [number, number][]) => void;
+  isPolygon: boolean;
+  onTogglePolygon: () => void;
+  onAutoConnectSegments: () => void;
+  onClearSegments: () => void;
   transformedVertices: Point[];
   config: TransformationConfig;
   onUpdateConfig: React.Dispatch<React.SetStateAction<TransformationConfig>>;
   onSetTool: (tool: any) => void;
   onOpenCoordsModal: () => void;
+  toggles: ClassroomToggles;
+  onUpdateToggles: React.Dispatch<React.SetStateAction<ClassroomToggles>>;
+  showLabels: boolean;
+  onToggleLabels: () => void;
 }
 
 export const AlgebraView: React.FC<AlgebraViewProps> = ({
   vertices,
   onUpdateVertices,
+  segments,
+  onUpdateSegments,
+  isPolygon,
+  onTogglePolygon,
+  onAutoConnectSegments,
+  onClearSegments,
   transformedVertices,
   config,
   onUpdateConfig,
   onSetTool,
-  onOpenCoordsModal
+  onOpenCoordsModal,
+  toggles,
+  onUpdateToggles,
+  showLabels,
+  onToggleLabels
 }) => {
-  // Cálculo de perímetro y área básica por fórmula de Gauss (Shoelace)
+  // Cálculo de perímetro y área básica por fórmula de Gauss (Shoelace) para polígonos cerrados
   const polygonMetrics = React.useMemo(() => {
-    if (vertices.length < 3) return { area: 0, perimeter: 0 };
+    if (!isPolygon || vertices.length < 3) return { area: 0, perimeter: 0 };
     let perim = 0;
     let shoelace = 0;
     for (let i = 0; i < vertices.length; i++) {
@@ -56,10 +82,20 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
       perimeter: Number(perim.toFixed(2)),
       area: Number((Math.abs(shoelace) / 2).toFixed(2))
     };
-  }, [vertices]);
+  }, [vertices, isPolygon]);
 
   const handleDeleteVertex = (index: number) => {
-    onUpdateVertices(vertices.filter((_, i) => i !== index));
+    // Eliminar el vértice y filtrar/actualizar segmentos que lo referenciaban
+    const updated = vertices.filter((_, i) => i !== index);
+    const updatedSegments = segments
+      .filter(([a, b]) => a !== index && b !== index)
+      .map(([a, b]) => [a > index ? a - 1 : a, b > index ? b - 1 : b] as [number, number]);
+    onUpdateVertices(updated);
+    onUpdateSegments(updatedSegments);
+  };
+
+  const handleDeleteSegment = (segIndex: number) => {
+    onUpdateSegments(segments.filter((_, idx) => idx !== segIndex));
   };
 
   return (
@@ -80,45 +116,263 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
         </div>
 
         {vertices.length === 0 ? (
-          <div className="p-4 rounded-xl border border-dashed border-border bg-panel text-center text-ink-soft">
-            Lienzo vacío. Haz clic en el plano con la herramienta <strong>Punto</strong> o <strong>Polígono</strong> para comenzar.
+          <div className="p-3.5 rounded-2xl border border-dashed border-border bg-panel text-center text-ink-soft space-y-1">
+            <p className="font-semibold text-ink">Lienzo vacío</p>
+            <p className="text-[11px] text-ink-faint leading-relaxed">
+              Selecciona <strong>Punto</strong> para marcar coordenadas libres, <strong>Segmento</strong> para unir dos puntos sin cerrar, o <strong>Polígono</strong> para figuras cerradas.
+            </p>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {/* Lista de Vértices Originales */}
-            {vertices.map((v, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between p-2 rounded-xl bg-panel border border-border/70 hover:border-blue-300 transition group"
-              >
-                <div className="flex items-center gap-2 font-mono text-xs">
-                  <div className="h-2.5 w-2.5 rounded-full bg-blue-600" />
-                  <span className="font-bold text-blue-900">
-                    {v.label || String.fromCharCode(65 + i)}
-                  </span>
-                  <span className="text-ink font-semibold">
-                    = ({formatNum(v.x)}, {formatNum(v.y)})
-                  </span>
-                </div>
-                <button
-                  onClick={() => handleDeleteVertex(i)}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-ink-soft hover:text-rose-600 transition"
-                  title="Eliminar vértice"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+          <div className="space-y-2">
+            {/* ESTADO DE LA FIGURA: PUNTOS LIBRES, SEGMENTOS O POLÍGONO */}
+            <div className="p-2.5 rounded-2xl bg-panel border border-border space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-[11px] flex items-center gap-1.5">
+                  {isPolygon ? (
+                    <>
+                      <Hexagon className="h-3.5 w-3.5 text-blue-600" />
+                      <span className="text-blue-700 dark:text-blue-400">Polígono Cerrado</span>
+                    </>
+                  ) : segments.length > 0 ? (
+                    <>
+                      <Link2 className="h-3.5 w-3.5 text-indigo-600" />
+                      <span className="text-indigo-700 dark:text-indigo-400">Segmentos Abiertos ({segments.length})</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-2 w-2 rounded-full bg-slate-400" />
+                      <span className="text-ink-soft">Puntos Libres ({vertices.length})</span>
+                    </>
+                  )}
+                </span>
 
-            {/* Métrica del Polígono */}
-            {vertices.length >= 3 && (
-              <div className="p-2 rounded-xl bg-blue-50/60 border border-blue-200 text-blue-950 font-mono text-[11px] flex justify-between">
-                <span>polígono1</span>
-                <span>Área = {polygonMetrics.area} | Perím = {polygonMetrics.perimeter}</span>
+                {/* Acciones de forma */}
+                <div className="flex items-center gap-1">
+                  {isPolygon ? (
+                    <button
+                      onClick={onTogglePolygon}
+                      title="Convertir a segmentos abiertos (sin relleno ni cierre forzado)"
+                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-surface border border-border text-ink-soft hover:text-ink hover:border-border-strong transition flex items-center gap-1"
+                    >
+                      <Unlink className="h-3 w-3" /> Abrir
+                    </button>
+                  ) : vertices.length >= 3 ? (
+                    <button
+                      onClick={onTogglePolygon}
+                      title="Cerrar los puntos en un polígono continuo con área y perímetro"
+                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-600 text-white hover:bg-blue-700 transition flex items-center gap-1 shadow-sm"
+                    >
+                      <Hexagon className="h-3 w-3" /> Cerrar Polígono
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Métricas si es polígono cerrado */}
+              {isPolygon && vertices.length >= 3 && (
+                <div className="p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-blue-950 dark:text-blue-200 font-mono text-[11px] flex justify-between">
+                  <span>Área = {polygonMetrics.area} u²</span>
+                  <span>Perímetro = {polygonMetrics.perimeter} u</span>
+                </div>
+              )}
+
+              {/* Botones de ayuda para conectar si no es polígono */}
+              {!isPolygon && (
+                <div className="flex flex-wrap gap-1 pt-1 border-t border-border/60">
+                  {segments.length === 0 && vertices.length >= 2 && (
+                    <button
+                      onClick={onAutoConnectSegments}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold bg-accent/10 text-accent hover:bg-accent/20 transition"
+                    >
+                      <Link2 className="h-3 w-3" /> Unir puntos en serie (A-B-C)
+                    </button>
+                  )}
+                  {segments.length > 0 && (
+                    <button
+                      onClick={onClearSegments}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                    >
+                      <Trash2 className="h-3 w-3" /> Quitar líneas
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Lista de Segmentos Trazados (si no es polígono cerrado) */}
+            {!isPolygon && segments.length > 0 && (
+              <div className="space-y-1">
+                <span className="text-[10px] font-semibold text-ink-faint">Líneas / Segmentos activos:</span>
+                <div className="grid grid-cols-1 gap-1 max-h-24 overflow-y-auto pr-1">
+                  {segments.map(([a, b], sIdx) => {
+                    const pA = vertices[a];
+                    const pB = vertices[b];
+                    if (!pA || !pB) return null;
+                    const len = formatNum(distance(pA, pB));
+                    const lA = pA.label || String.fromCharCode(65 + a);
+                    const lB = pB.label || String.fromCharCode(65 + b);
+                    return (
+                      <div
+                        key={sIdx}
+                        className="flex items-center justify-between px-2.5 py-1 rounded-lg bg-panel/70 border border-border/70 text-[11px] font-mono group"
+                      >
+                        <span className="text-ink font-semibold">
+                          Segmento {lA}{lB} = <span className="text-accent">{len} u</span>
+                        </span>
+                        <button
+                          onClick={() => handleDeleteSegment(sIdx)}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 text-ink-soft hover:text-rose-600 transition"
+                          title="Eliminar este segmento"
+                        >
+                          <Trash2 className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
+
+            {/* Lista de Vértices Originales */}
+            <div className="space-y-1">
+              <span className="text-[10px] font-semibold text-ink-faint">Coordenadas de vértices:</span>
+              <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                {vertices.map((v, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between p-1.5 px-2 rounded-xl bg-panel border border-border/70 hover:border-blue-300 transition group"
+                  >
+                    <div className="flex items-center gap-2 font-mono text-xs">
+                      <div className="h-2 w-2 rounded-full bg-blue-600" />
+                      <span className="font-bold text-blue-900 dark:text-blue-300">
+                        {v.label || String.fromCharCode(65 + i)}
+                      </span>
+                      <span className="text-ink font-semibold">
+                        = ({formatNum(v.x)}, {formatNum(v.y)})
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteVertex(i)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-ink-soft hover:text-rose-600 transition"
+                      title="Eliminar vértice"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
+      </div>
+
+      {/* 2. SECCIÓN: OPCIONES DE VISUALIZACIÓN EN PIZARRA (LÍNEAS GUÍA, MEDIDAS, COORDENADAS) */}
+      <div className="space-y-2 pt-2 border-t border-border">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint flex items-center gap-1.5">
+          <Layers className="h-3 w-3 text-accent" />
+          Opciones de Visualización en Pizarra
+        </span>
+
+        <div className="p-2.5 rounded-2xl bg-panel border border-border space-y-2">
+          {/* Toggle Líneas Guía */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
+                <Compass className="h-3.5 w-3.5 text-rose-500" />
+                <span>Líneas Guía de Construcción</span>
+              </div>
+              <p className="text-[10px] text-ink-soft leading-tight mt-0.5">
+                Muestra rayos, perpendiculares y vectores que conectan la preimagen con la imagen.
+                {vertices.length === 0 && (
+                  <span className="block text-amber-600 dark:text-amber-400 mt-0.5 italic">
+                    (Añade puntos en el lienzo para visualizarlas)
+                  </span>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={() =>
+                onUpdateToggles((prev) => ({
+                  ...prev,
+                  showConstructionGuides: !prev.showConstructionGuides
+                }))
+              }
+              className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+                toggles.showConstructionGuides ? 'bg-rose-500' : 'bg-border-strong'
+              }`}
+            >
+              <div
+                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-0.75 left-0.75 ${
+                  toggles.showConstructionGuides ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="h-px bg-border/60" />
+
+          {/* Toggle Medidas de Lados */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
+                <Ruler className="h-3.5 w-3.5 text-blue-500" />
+                <span>Medidas Numéricas de Lados</span>
+              </div>
+              <p className="text-[10px] text-ink-soft leading-tight mt-0.5">
+                Muestra la longitud exacta de cada segmento en pantalla.
+                {(!isPolygon && segments.length === 0) && (
+                  <span className="block text-amber-600 dark:text-amber-400 mt-0.5 italic">
+                    (Requiere trazar segmentos o polígono)
+                  </span>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={() =>
+                onUpdateToggles((prev) => ({
+                  ...prev,
+                  showSideLengths: !prev.showSideLengths
+                }))
+              }
+              className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+                toggles.showSideLengths ? 'bg-blue-600' : 'bg-border-strong'
+              }`}
+            >
+              <div
+                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-0.75 left-0.75 ${
+                  toggles.showSideLengths ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="h-px bg-border/60" />
+
+          {/* Toggle Coordenadas de Vértices */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
+                {showLabels ? <Eye className="h-3.5 w-3.5 text-accent" /> : <EyeOff className="h-3.5 w-3.5 text-ink-soft" />}
+                <span>Etiquetas y Coordenadas (x, y)</span>
+              </div>
+              <p className="text-[10px] text-ink-soft leading-tight mt-0.5">
+                Muestra los nombres A(x, y) y A'(x', y') en el plano cartesiano.
+              </p>
+            </div>
+            <button
+              onClick={onToggleLabels}
+              className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+                showLabels ? 'bg-accent' : 'bg-border-strong'
+              }`}
+            >
+              <div
+                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-0.75 left-0.75 ${
+                  showLabels ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 2. SECCIÓN: ELEMENTO RECTOR / PARÁMETROS DE LA TRANSFORMACIÓN */}

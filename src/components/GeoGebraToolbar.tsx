@@ -35,8 +35,6 @@ interface GeoGebraToolbarProps {
   onOpenPresets: () => void;
   onUndo: () => void;
   canUndo: boolean;
-  isCleanBoard: boolean;
-  onToggleCleanBoard: () => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
   sidebarTab: 'algebra' | 'notebook' | 'problem';
@@ -55,8 +53,6 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
   onOpenPresets,
   onUndo,
   canUndo,
-  isCleanBoard,
-  onToggleCleanBoard,
   isSidebarOpen,
   onToggleSidebar,
   sidebarTab,
@@ -123,21 +119,39 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           {/* Punto */}
           <button
             onClick={() => onSelectTool('point')}
-            title="Punto (Haz clic en el plano cartesiano para crear puntos)"
+            title="Punto (Haz clic en el plano para crear puntos libres sin unirlos)"
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
               activeTool === 'point'
                 ? 'bg-surface text-accent shadow-sm border border-border/80'
                 : 'text-ink-soft hover:text-ink hover:bg-black/5'
             }`}
           >
-            <div className="h-3 w-3 rounded-full bg-accent border-2 border-surface" />
+            <div className="h-2.5 w-2.5 rounded-full bg-accent" />
             <span className="hidden md:inline">Punto</span>
+          </button>
+
+          {/* Segmento */}
+          <button
+            onClick={() => onSelectTool('segment')}
+            title="Segmento (Haz clic en dos puntos para unirlos con una línea recta sin cerrar la figura)"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
+              activeTool === 'segment'
+                ? 'bg-surface text-accent shadow-sm border border-border/80'
+                : 'text-ink-soft hover:text-ink hover:bg-black/5'
+            }`}
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="5" cy="19" r="2.5" fill="currentColor"/>
+              <circle cx="19" cy="5" r="2.5" fill="currentColor"/>
+              <line x1="7" y1="17" x2="17" y2="7"/>
+            </svg>
+            <span className="hidden md:inline">Segmento</span>
           </button>
 
           {/* Polígono */}
           <button
             onClick={() => onSelectTool('polygon')}
-            title="Polígono (Selecciona los vértices en orden y cierra en el primero)"
+            title="Polígono (Selecciona vértices en orden y haz clic en el primero para cerrar la figura)"
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition ${
               activeTool === 'polygon'
                 ? 'bg-surface text-accent shadow-sm border border-border/80'
@@ -303,14 +317,15 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
         {/* Botón Ocultar / Mostrar Panel Lateral */}
         <button
           onClick={onToggleSidebar}
-          title={isSidebarOpen ? 'Ocultar panel lateral (Área máxima de lienzo)' : 'Mostrar panel lateral'}
-          className={`p-2 rounded-xl border transition ${
+          title={isSidebarOpen ? 'Ocultar panel lateral (Área máxima de pizarra)' : 'Mostrar panel lateral'}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition ${
             isSidebarOpen
               ? 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
-              : 'bg-panel border-border text-ink-soft hover:text-ink'
+              : 'bg-panel border-border text-ink hover:border-accent hover:text-accent'
           }`}
         >
           {isSidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+          <span className="hidden sm:inline">{isSidebarOpen ? 'Ocultar Panel' : 'Ver Panel'}</span>
         </button>
 
         {/* Botón Modo Oscuro / Modo Claro */}
@@ -326,17 +341,19 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           )}
         </button>
 
-        {/* Alternar Pantalla Completa Limpia */}
+        {/* Botón Pantalla Completa (F11) */}
         <button
-          onClick={onToggleCleanBoard}
-          title={isCleanBoard ? 'Restaurar controles' : 'Pizarra Limpia / Pantalla Completa'}
-          className={`p-2 rounded-xl border transition ${
-            isCleanBoard
-              ? 'bg-accent text-white border-accent'
-              : 'bg-panel text-ink border-border hover:border-border-strong'
-          }`}
+          onClick={() => {
+            if (!document.fullscreenElement) {
+              document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+              document.exitFullscreen().catch(() => {});
+            }
+          }}
+          title="Pantalla Completa"
+          className="p-2 rounded-xl bg-panel text-ink border border-border hover:border-border-strong hover:text-accent transition"
         >
-          {isCleanBoard ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          <Maximize className="h-4 w-4" />
         </button>
       </div>
     </header>

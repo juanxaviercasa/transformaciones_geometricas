@@ -6,7 +6,12 @@ export interface Point {
 
 export type GridStyle = 'lines' | 'dots' | 'axes';
 
-export type ToolMode = 'select' | 'pan' | 'point' | 'polygon' | 'draw' | 'pivot';
+export type ToolMode = 'select' | 'pan' | 'point' | 'segment' | 'polygon' | 'draw' | 'pivot';
+
+export interface SegmentConnection {
+  fromIndex: number;
+  toIndex: number;
+}
 
 export type ProblemMode = 'DIRECT' | 'INVERSE';
 

@@ -69,8 +69,11 @@ export default function App() {
   // 1. HERRAMIENTA ACTIVA ESTILO GEOGEBRA
   const [tool, setTool] = useState<ToolMode>('select');
 
-  // 2. ESTADO DE LA PREIMAGEN (INICIA CON PIZARRA LIMPIA POR DEFECTO O FIGURA MINIMA)
+  // 2. ESTADO DE LA PREIMAGEN (VÉRTICES, SEGMENTOS ABIERTOS O POLÍGONO CERRADO)
   const [vertices, setVertices] = useState<Point[]>([]);
+  const [segments, setSegments] = useState<[number, number][]>([]);
+  const [isPolygon, setIsPolygon] = useState<boolean>(false);
+  const [segmentStartVertex, setSegmentStartVertex] = useState<number | null>(null);
 
   // 3. ESTADO DE LA TRANSFORMACIÓN GEOMÉTRICA
   const [config, setConfig] = useState<TransformationConfig>({
@@ -98,7 +101,6 @@ export default function App() {
   // 5. PESTAÑAS DEL PANEL LATERAL RESPONSIVO
   const [sidebarTab, setSidebarTab] = useState<'algebra' | 'notebook' | 'problem'>('algebra');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
-  const [cleanBoardMode, setCleanBoardMode] = useState<boolean>(false);
 
   // 6. TOGGLES DE INSPECCIÓN
   const [toggles, setToggles] = useState<ClassroomToggles>({
@@ -205,30 +207,88 @@ export default function App() {
   // Acción Limpiar Pizarra (Canvas Limpio)
   const handleClearCanvas = () => {
     setVertices([]);
+    setSegments([]);
+    setIsPolygon(false);
+    setSegmentStartVertex(null);
     setTool('select');
   };
 
   // Cargar figura prediseñada
   const handleLoadPreset = (preset: (typeof SHAPE_PRESETS)[0]) => {
     setVertices(preset.vertices);
+    setIsPolygon(true);
+    const segs: [number, number][] = [];
+    for (let i = 0; i < preset.vertices.length; i++) {
+      segs.push([i, (i + 1) % preset.vertices.length]);
+    }
+    setSegments(segs);
+    setSegmentStartVertex(null);
     setIsPresetsOpen(false);
     setTool('select');
   };
 
   // Cargar triángulo escolar rápido
   const handleLoadQuickTriangle = () => {
-    setVertices([
+    const pts: Point[] = [
       { x: 1, y: 1, label: 'A' },
       { x: 4, y: 2, label: 'B' },
       { x: 2, y: 5, label: 'C' }
-    ]);
+    ];
+    setVertices(pts);
+    setIsPolygon(true);
+    setSegments([[0, 1], [1, 2], [2, 0]]);
+    setSegmentStartVertex(null);
     setTool('select');
   };
 
-  // Deshacer último vértice
+  // Alternar Polígono Cerrado / Segmentos Abiertos
+  const handleTogglePolygon = () => {
+    if (isPolygon) {
+      setIsPolygon(false);
+    } else {
+      if (vertices.length >= 3) {
+        setIsPolygon(true);
+        const segs: [number, number][] = [];
+        for (let i = 0; i < vertices.length; i++) {
+          segs.push([i, (i + 1) % vertices.length]);
+        }
+        setSegments(segs);
+      }
+    }
+  };
+
+  // Unir puntos consecutivamente en serie (A-B-C...)
+  const handleAutoConnectSegments = () => {
+    if (vertices.length >= 2) {
+      const segs: [number, number][] = [];
+      for (let i = 0; i < vertices.length - 1; i++) {
+        segs.push([i, i + 1]);
+      }
+      setSegments(segs);
+    }
+  };
+
+  // Quitar segmentos
+  const handleClearSegments = () => {
+    setSegments([]);
+    setIsPolygon(false);
+  };
+
+  // Deshacer última acción (punto en curso, último segmento o último vértice)
   const handleUndo = () => {
+    if (segmentStartVertex !== null) {
+      setSegmentStartVertex(null);
+      return;
+    }
+    if (segments.length > 0 && !isPolygon) {
+      setSegments((prev) => prev.slice(0, -1));
+      return;
+    }
     if (vertices.length > 0) {
+      const newLen = vertices.length - 1;
       setVertices((prev) => prev.slice(0, -1));
+      setSegments((prev) => prev.filter(([a, b]) => a < newLen && b < newLen));
+      if (newLen < 3) setIsPolygon(false);
     }
   };
 
@@ -252,6 +312,17 @@ export default function App() {
       });
       if (newPts.length >= 2) {
         setVertices(newPts);
+        setIsPolygon(newPts.length >= 3);
+        const segs: [number, number][] = [];
+        for (let i = 0; i < newPts.length; i++) {
+          if (newPts.length >= 3) {
+            segs.push([i, (i + 1) % newPts.length]);
+          } else if (i < newPts.length - 1) {
+            segs.push([i, i + 1]);
+          }
+        }
+        setSegments(segs);
+        setSegmentStartVertex(null);
         setIsCoordsModalOpen(false);
         setTool('select');
       } else {
@@ -824,158 +895,242 @@ export default function App() {
       }
     }
 
-    // 5. DIBUJAR POLÍGONOS CON ALGORITMO ANTI-COLISIÓN DE ETIQUETAS
-    const drawGeoGebraPolygon = (
-      pts: Point[],
-      strokeColor: string,
-      fillColor: string,
-      isTransformed = false
-    ) => {
-      if (pts.length === 0) return;
+    // 5. DIBUJAR PUNTOS Y LADOS/SEGMENTOS (FIGURA PREIMAGEN F Y TRANSFORMADA F')
+    const preStroke = isDarkMode ? '#38bdf8' : '#1565c0';
+    const preFill = isDarkMode ? 'rgba(56, 189, 248, 0.2)' : 'rgba(21, 101, 192, 0.14)';
+    const transStroke = isDarkMode ? '#c084fc' : '#7b1fa2';
+    const transFill = isDarkMode ? 'rgba(192, 132, 252, 0.2)' : 'rgba(123, 31, 162, 0.12)';
 
-      // Calcular centroide para proyectar etiquetas hacia el exterior
-      let centroidX = 0;
-      let centroidY = 0;
-      pts.forEach((pt) => {
-        centroidX += pt.x;
-        centroidY += pt.y;
-      });
-      centroidX /= pts.length;
-      centroidY /= pts.length;
-      const cScr = toScreen({ x: centroidX, y: centroidY }, width, height);
+    // A) CASO 1: POLÍGONO CERRADO (isPolygon && vertices.length >= 3)
+    if (isPolygon && vertices.length >= 3) {
+      // Dibujar polígono F' transformado (relleno + borde)
+      if (transformedVertices.length >= 3) {
+        ctx.beginPath();
+        const fPrime = toScreen(transformedVertices[0], width, height);
+        ctx.moveTo(fPrime.x, fPrime.y);
+        for (let i = 1; i < transformedVertices.length; i++) {
+          const p = toScreen(transformedVertices[i], width, height);
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = transFill;
+        ctx.fill();
+        ctx.strokeStyle = transStroke;
+        ctx.lineWidth = 2.2;
+        ctx.setLineDash([]);
+        ctx.stroke();
 
-      // Dibujar relleno y bordes
+        // Medidas de lados F'
+        if (toggles.showSideLengths) {
+          ctx.fillStyle = transStroke;
+          ctx.font = 'bold 10px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          for (let i = 0; i < transformedVertices.length; i++) {
+            const pA = transformedVertices[i];
+            const pB = transformedVertices[(i + 1) % transformedVertices.length];
+            const sA = toScreen(pA, width, height);
+            const sB = toScreen(pB, width, height);
+            ctx.fillText(
+              `${formatNum(distance(pA, pB))}`,
+              (sA.x + sB.x) / 2,
+              (sA.y + sB.y) / 2 - 6
+            );
+          }
+        }
+      }
+
+      // Dibujar polígono F original (relleno + borde)
       ctx.beginPath();
-      const first = toScreen(pts[0], width, height);
-      ctx.moveTo(first.x, first.y);
-      for (let i = 1; i < pts.length; i++) {
-        const p = toScreen(pts[i], width, height);
+      const fOrig = toScreen(vertices[0], width, height);
+      ctx.moveTo(fOrig.x, fOrig.y);
+      for (let i = 1; i < vertices.length; i++) {
+        const p = toScreen(vertices[i], width, height);
         ctx.lineTo(p.x, p.y);
       }
       ctx.closePath();
-      ctx.fillStyle = fillColor;
+      ctx.fillStyle = preFill;
       ctx.fill();
-
-      ctx.strokeStyle = strokeColor;
+      ctx.strokeStyle = preStroke;
       ctx.lineWidth = 2.2;
       ctx.setLineDash([]);
       ctx.stroke();
 
-      // Medidas de lados si está activado
-      if (toggles.showSideLengths && pts.length >= 3) {
-        ctx.fillStyle = strokeColor;
+      // Medidas de lados F
+      if (toggles.showSideLengths) {
+        ctx.fillStyle = preStroke;
         ctx.font = 'bold 10px "JetBrains Mono", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        for (let i = 0; i < pts.length; i++) {
-          const pA = pts[i];
-          const pB = pts[(i + 1) % pts.length];
+        for (let i = 0; i < vertices.length; i++) {
+          const pA = vertices[i];
+          const pB = vertices[(i + 1) % vertices.length];
           const sA = toScreen(pA, width, height);
           const sB = toScreen(pB, width, height);
-          const midX = (sA.x + sB.x) / 2;
-          const midY = (sA.y + sB.y) / 2;
-          ctx.fillText(`${formatNum(distance(pA, pB))}`, midX, midY - 6);
+          ctx.fillText(
+            `${formatNum(distance(pA, pB))}`,
+            (sA.x + sB.x) / 2,
+            (sA.y + sB.y) / 2 - 6
+          );
         }
       }
+    } else {
+      // B) CASO 2: SEGMENTOS ABIERTOS O PUNTOS LIBRES
+      // Dibujar cada segmento declarado en `segments` (sin rellenar, sin cerrar a triángulo)
+      segments.forEach(([a, b]) => {
+        // Segmento en figura transformada F'
+        if (transformedVertices[a] && transformedVertices[b]) {
+          const sA = toScreen(transformedVertices[a], width, height);
+          const sB = toScreen(transformedVertices[b], width, height);
+          ctx.strokeStyle = transStroke;
+          ctx.lineWidth = 2.2;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.moveTo(sA.x, sA.y);
+          ctx.lineTo(sB.x, sB.y);
+          ctx.stroke();
 
-      // Dibujar vértices con anti-colisión
-      pts.forEach((pt, i) => {
-        const pScr = toScreen(pt, width, height);
-        const isHovered = !isTransformed && hoveredVertexIndex === i;
-
-        // Vértice circular GeoGebra
-        ctx.beginPath();
-        ctx.arc(pScr.x, pScr.y, isHovered ? 6.5 : 5, 0, Math.PI * 2);
-        ctx.fillStyle = isHovered ? '#10b981' : strokeColor;
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Vector exterior desde el centroide hacia el vértice
-        const dx = pScr.x - cScr.x;
-        const dy = pScr.y - cScr.y;
-        const distC = Math.hypot(dx, dy) || 1;
-        const labelDist = 16;
-        const lx = pScr.x + (dx / distC) * labelDist;
-        const ly = pScr.y + (dy / distC) * labelDist;
-
-        if (showLabels) {
-          const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
-          const primeSuffix = isTransformed ? "'" : '';
-          const labelText = `${cleanName}${primeSuffix} (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
-
-          ctx.font = 'bold 11px "Inter", -apple-system, sans-serif';
-          const textWidth = ctx.measureText(labelText).width;
-
-          // Protección contra corte de texto en los márgenes de la pantalla
-          let align: CanvasTextAlign = dx >= 0 ? 'left' : 'right';
-          let targetLx = lx;
-          if (align === 'right' && lx - textWidth < 8) {
-            align = 'left';
-            targetLx = pScr.x + 10;
-          } else if (align === 'left' && lx + textWidth > width - 8) {
-            align = 'right';
-            targetLx = pScr.x - 10;
+          if (toggles.showSideLengths) {
+            ctx.fillStyle = transStroke;
+            ctx.font = 'bold 10px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              `${formatNum(distance(transformedVertices[a], transformedVertices[b]))}`,
+              (sA.x + sB.x) / 2,
+              (sA.y + sB.y) / 2 - 6
+            );
           }
+        }
 
-          const targetLy = Math.max(16, Math.min(height - 12, ly));
-          ctx.textAlign = align;
-          ctx.textBaseline = dy >= 0 ? 'top' : 'bottom';
+        // Segmento en figura original F
+        if (vertices[a] && vertices[b]) {
+          const sA = toScreen(vertices[a], width, height);
+          const sB = toScreen(vertices[b], width, height);
+          ctx.strokeStyle = preStroke;
+          ctx.lineWidth = 2.2;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.moveTo(sA.x, sA.y);
+          ctx.lineTo(sB.x, sB.y);
+          ctx.stroke();
 
-          // Halo blanco/oscuro anti-obstrucción
-          ctx.strokeStyle = isDarkMode ? '#0b0f19' : 'rgba(255, 255, 255, 0.9)';
-          ctx.lineWidth = 3.5;
-          ctx.strokeText(labelText, targetLx, targetLy);
-
-          ctx.fillStyle = isDarkMode ? '#f8fafc' : '#0f172a';
-          ctx.fillText(labelText, targetLx, targetLy);
+          if (toggles.showSideLengths) {
+            ctx.fillStyle = preStroke;
+            ctx.font = 'bold 10px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+              `${formatNum(distance(vertices[a], vertices[b]))}`,
+              (sA.x + sB.x) / 2,
+              (sA.y + sB.y) / 2 - 6
+            );
+          }
         }
       });
-    };
 
-    // 6. DIBUJAR FIGURA TRANSFORMADA F' (GeoGebra Violet `#7B1FA2` o Neon `#C084FC`)
-    const transStroke = isDarkMode ? '#c084fc' : '#7b1fa2';
-    const transFill = isDarkMode ? 'rgba(192, 132, 252, 0.2)' : 'rgba(123, 31, 162, 0.12)';
-    if (transformedVertices.length >= 2) {
-      drawGeoGebraPolygon(
-        transformedVertices,
-        transStroke,
-        transFill,
-        true
-      );
-    } else if (transformedVertices.length === 1) {
-      const p = toScreen(transformedVertices[0], width, height);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = transStroke;
-      ctx.fill();
+      // Línea elástica (rubber-band) si se está usando la herramienta Segmento
+      if (
+        tool === 'segment' &&
+        segmentStartVertex !== null &&
+        vertices[segmentStartVertex] &&
+        mouseCoord
+      ) {
+        const startScr = toScreen(vertices[segmentStartVertex], width, height);
+        const curScr = toScreen(mouseCoord, width, height);
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(startScr.x, startScr.y);
+        ctx.lineTo(curScr.x, curScr.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
 
-    // 7. DIBUJAR FIGURA PREIMAGEN F (GeoGebra Blue `#1565C0` o Neon `#38BDF8`)
-    const preStroke = isDarkMode ? '#38bdf8' : '#1565c0';
-    const preFill = isDarkMode ? 'rgba(56, 189, 248, 0.2)' : 'rgba(21, 101, 192, 0.14)';
-    if (vertices.length >= 2) {
-      drawGeoGebraPolygon(
-        vertices,
-        preStroke,
-        preFill,
-        false
-      );
-    } else if (vertices.length === 1) {
-      const p = toScreen(vertices[0], width, height);
+    // C) DIBUJAR VÉRTICES (Puntos y sus etiquetas anti-colisión)
+    // 1. Vértices de F' (Transformada)
+    transformedVertices.forEach((pt, i) => {
+      const pScr = toScreen(pt, width, height);
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 5.5, 0, Math.PI * 2);
-      ctx.fillStyle = preStroke;
+      ctx.arc(pScr.x, pScr.y, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = transStroke;
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+
+      if (showLabels) {
+        const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
+        const labelText = `${cleanName}' (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
+        ctx.font = 'bold 11px "Inter", -apple-system, sans-serif';
+        const textWidth = ctx.measureText(labelText).width;
+        let align: CanvasTextAlign = 'left';
+        let lx = pScr.x + 8;
+        if (lx + textWidth > width - 10) {
+          align = 'right';
+          lx = pScr.x - 8;
+        }
+        ctx.textAlign = align;
+        ctx.textBaseline = 'middle';
+        ctx.strokeStyle = isDarkMode ? '#0b0f19' : 'rgba(255, 255, 255, 0.9)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(labelText, lx, pScr.y - 8);
+        ctx.fillStyle = isDarkMode ? '#e9d5ff' : '#581c87';
+        ctx.fillText(labelText, lx, pScr.y - 8);
+      }
+    });
+
+    // 2. Vértices de F (Original)
+    vertices.forEach((pt, i) => {
+      const pScr = toScreen(pt, width, height);
+      const isHovered = hoveredVertexIndex === i;
+      const isSegmentSelected = tool === 'segment' && segmentStartVertex === i;
+
+      // Resaltado visual si está seleccionado como inicio de segmento
+      if (isSegmentSelected) {
+        ctx.beginPath();
+        ctx.arc(pScr.x, pScr.y, 10, 0, Math.PI * 2);
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.arc(pScr.x, pScr.y, isHovered || isSegmentSelected ? 6.5 : 5, 0, Math.PI * 2);
+      ctx.fillStyle = isHovered ? '#10b981' : isSegmentSelected ? '#2563eb' : preStroke;
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.fillStyle = isDarkMode ? '#f8fafc' : '#0f172a';
-      ctx.fillText(`${vertices[0].label || 'A'} (${vertices[0].x}, ${vertices[0].y})`, p.x + 8, p.y - 8);
-    }
+
+      if (showLabels) {
+        const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
+        const labelText = `${cleanName} (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
+        ctx.font = 'bold 11px "Inter", -apple-system, sans-serif';
+        const textWidth = ctx.measureText(labelText).width;
+        let align: CanvasTextAlign = 'left';
+        let lx = pScr.x + 8;
+        if (lx + textWidth > width - 10) {
+          align = 'right';
+          lx = pScr.x - 8;
+        }
+        ctx.textAlign = align;
+        ctx.textBaseline = 'middle';
+        ctx.strokeStyle = isDarkMode ? '#0b0f19' : 'rgba(255, 255, 255, 0.9)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(labelText, lx, pScr.y - 8);
+        ctx.fillStyle = isDarkMode ? '#bae6fd' : '#0c4a6e';
+        ctx.fillText(labelText, lx, pScr.y - 8);
+      }
+    });
   }, [
     vertices,
+    segments,
+    isPolygon,
+    segmentStartVertex,
+    mouseCoord,
     transformedVertices,
     gridStyle,
     scale,
@@ -999,22 +1154,82 @@ export default function App() {
     const clientX = e.clientX - rect.left;
     const clientY = e.clientY - rect.top;
 
-    // Herramienta Punto o Polígono: colocar vértice en el plano
-    if (tool === 'point' || tool === 'polygon') {
+    // Herramienta Punto: colocar vértice libre independiente en el plano
+    if (tool === 'point') {
+      const cart = toCartesian(clientX, clientY, rect.width, rect.height);
+      const nextLabel = String.fromCharCode(65 + vertices.length);
+      setVertices((prev) => [...prev, { x: cart.x, y: cart.y, label: nextLabel }]);
+      // No conecta segmentos, no cierra polígono. Puntos 100% libres.
+      return;
+    }
+
+    // Herramienta Segmento: conectar dos puntos o crear puntos y unirlos
+    if (tool === 'segment') {
       const cart = toCartesian(clientX, clientY, rect.width, rect.height);
 
-      // Si es la herramienta polígono y hace clic cerca del primer vértice para cerrar:
-      if (tool === 'polygon' && vertices.length >= 2) {
+      // Buscar si hizo clic cerca de un vértice existente
+      let targetIndex: number | null = null;
+      for (let i = 0; i < vertices.length; i++) {
+        const vScr = toScreen(vertices[i], rect.width, rect.height);
+        if (Math.hypot(clientX - vScr.x, clientY - vScr.y) <= 15) {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      // Si no hay vértice donde hizo clic, creamos uno nuevo en esa posición
+      if (targetIndex === null) {
+        targetIndex = vertices.length;
+        const nextLabel = String.fromCharCode(65 + vertices.length);
+        setVertices((prev) => [...prev, { x: cart.x, y: cart.y, label: nextLabel }]);
+      }
+
+      if (segmentStartVertex === null) {
+        // Primer clic: seleccionar vértice de inicio
+        setSegmentStartVertex(targetIndex);
+      } else {
+        // Segundo clic: unir vértice de inicio con este vértice destino
+        if (targetIndex !== segmentStartVertex) {
+          const from = segmentStartVertex;
+          const to = targetIndex;
+          const alreadyExists = segments.some(
+            ([a, b]) => (a === from && b === to) || (a === to && b === from)
+          );
+          if (!alreadyExists) {
+            setSegments((prev) => [...prev, [from, to]]);
+          }
+        }
+        setSegmentStartVertex(null);
+      }
+      return;
+    }
+
+    // Herramienta Polígono: crear figura cerrada
+    if (tool === 'polygon') {
+      const cart = toCartesian(clientX, clientY, rect.width, rect.height);
+
+      // Si hace clic cerca del primer vértice para cerrar:
+      if (vertices.length >= 3) {
         const firstScr = toScreen(vertices[0], rect.width, rect.height);
-        if (Math.hypot(clientX - firstScr.x, clientY - firstScr.y) <= 15) {
-          // Cerrar polígono y pasar a herramienta mover
+        if (Math.hypot(clientX - firstScr.x, clientY - firstScr.y) <= 16) {
+          setIsPolygon(true);
+          // Asegurar segmentos de cierre
+          const segs: [number, number][] = [];
+          for (let i = 0; i < vertices.length; i++) {
+            segs.push([i, (i + 1) % vertices.length]);
+          }
+          setSegments(segs);
           setTool('select');
           return;
         }
       }
 
       const nextLabel = String.fromCharCode(65 + vertices.length);
+      const newIdx = vertices.length;
       setVertices((prev) => [...prev, { x: cart.x, y: cart.y, label: nextLabel }]);
+      if (newIdx > 0) {
+        setSegments((prev) => [...prev, [newIdx - 1, newIdx]]);
+      }
       return;
     }
 
@@ -1159,9 +1374,7 @@ export default function App() {
         onOpenPresets={() => setIsPresetsOpen(true)}
         onOpenGuide={() => setIsGuideOpen(true)}
         onUndo={handleUndo}
-        canUndo={vertices.length > 0}
-        isCleanBoard={cleanBoardMode}
-        onToggleCleanBoard={() => setCleanBoardMode(!cleanBoardMode)}
+        canUndo={vertices.length > 0 || segments.length > 0 || segmentStartVertex !== null}
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         sidebarTab={sidebarTab}
@@ -1176,34 +1389,34 @@ export default function App() {
           <Info className="h-3.5 w-3.5 text-accent shrink-0" />
           <span className="font-medium">
             {tool === 'select' && 'Mover: Arrastra vértices, el centro o arrastra el fondo para desplazar el plano.'}
-            {tool === 'point' && 'Punto: Haz clic en cualquier lugar del plano para añadir un nuevo punto.'}
+            {tool === 'point' && 'Punto: Haz clic en el plano cartesiano para marcar puntos libres sin unirlos.'}
+            {tool === 'segment' &&
+              (segmentStartVertex === null
+                ? 'Segmento: Haz clic en el primer punto para iniciar la línea recta.'
+                : `Segmento: Haz clic en el segundo punto para unirlo con ${vertices[segmentStartVertex]?.label || 'el punto inicial'} (no cerrará a triángulo).`)}
             {tool === 'polygon' && 'Polígono: Haz clic en cada vértice y vuelve a hacer clic en el primer punto para cerrar la figura.'}
             {tool === 'pivot' && 'Pivote: Haz clic en el plano para fijar el nuevo centro de giro u homotecia.'}
           </span>
         </div>
 
-        {/* Toggles de inspección rápida */}
-        <div className="hidden sm:flex items-center gap-2">
-          <button
-            onClick={() =>
-              setToggles((prev) => ({ ...prev, showConstructionGuides: !prev.showConstructionGuides }))
-            }
-            className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
-              toggles.showConstructionGuides ? 'bg-rose-100 text-rose-800' : 'text-ink-soft hover:text-ink'
-            }`}
-          >
-            Líneas Guía
-          </button>
-          <button
-            onClick={() =>
-              setToggles((prev) => ({ ...prev, showSideLengths: !prev.showSideLengths }))
-            }
-            className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
-              toggles.showSideLengths ? 'bg-blue-100 text-blue-800' : 'text-ink-soft hover:text-ink'
-            }`}
-          >
-            Medidas
-          </button>
+        {/* Indicador de estado de la figura en la pizarra */}
+        <div className="flex items-center gap-2 text-xs">
+          <span className="font-mono text-ink-soft hidden sm:inline">
+            {vertices.length} {vertices.length === 1 ? 'punto' : 'puntos'}
+          </span>
+          {isPolygon ? (
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+              Polígono Cerrado
+            </span>
+          ) : segments.length > 0 ? (
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+              {segments.length} {segments.length === 1 ? 'segmento' : 'segmentos abiertos'}
+            </span>
+          ) : vertices.length > 0 ? (
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-ink-soft">
+              Puntos libres
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -1286,7 +1499,8 @@ export default function App() {
         </div>
 
         {/* BOTÓN FLOTANTE PARA REABRIR PANEL CUANDO ESTÁ OCULTO */}
-        {!isSidebarOpen && !cleanBoardMode && (
+        {/* BOTÓN FLOTANTE PARA REABRIR PANEL CUANDO ESTÁ OCULTO */}
+        {!isSidebarOpen && (
           <button
             onClick={() => setIsSidebarOpen(true)}
             title="Mostrar panel lateral"
@@ -1300,7 +1514,7 @@ export default function App() {
         )}
 
         {/* PANEL LATERAL RESPONSIVO (VISTA ÁLGEBRA / CUADERNO / PROBLEMAS) */}
-        {!cleanBoardMode && isSidebarOpen && (
+        {isSidebarOpen && (
           <aside className="w-[380px] h-full bg-surface border-l border-border shadow-2xl flex flex-col z-30 animate-in slide-in-from-right duration-150">
             {/* Cabecera del panel con botón para ocultar */}
             <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border bg-panel/70">
@@ -1324,11 +1538,21 @@ export default function App() {
                 <AlgebraView
                   vertices={vertices}
                   onUpdateVertices={setVertices}
+                  segments={segments}
+                  onUpdateSegments={setSegments}
+                  isPolygon={isPolygon}
+                  onTogglePolygon={handleTogglePolygon}
+                  onAutoConnectSegments={handleAutoConnectSegments}
+                  onClearSegments={handleClearSegments}
                   transformedVertices={transformedVertices}
                   config={config}
                   onUpdateConfig={setConfig}
                   onSetTool={setTool}
                   onOpenCoordsModal={() => setIsCoordsModalOpen(true)}
+                  toggles={toggles}
+                  onUpdateToggles={setToggles}
+                  showLabels={showLabels}
+                  onToggleLabels={() => setShowLabels((prev) => !prev)}
                 />
               )}
 
