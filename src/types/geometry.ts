@@ -2,6 +2,7 @@ export interface Point {
   x: number;
   y: number;
   label?: string;
+  color?: string;
 }
 
 export type GridStyle = 'lines' | 'dots' | 'axes';
@@ -11,6 +12,16 @@ export type ToolMode = 'select' | 'pan' | 'point' | 'segment' | 'polygon' | 'dra
 export interface SegmentConnection {
   fromIndex: number;
   toIndex: number;
+}
+
+export interface AppSettings {
+  pointSize: 'small' | 'medium' | 'large';
+  lineThickness: 'thin' | 'normal' | 'thick';
+  defaultColor: string;
+  snapToGrid: boolean;
+  showLabels: boolean;
+  isDarkMode: boolean;
+  uiFontSize?: 'normal' | 'large' | 'extra-large';
 }
 
 export type ProblemMode = 'DIRECT' | 'INVERSE';
@@ -36,6 +47,8 @@ export interface PolygonPreset {
   name: string;
   category: string;
   vertices: Point[];
+  recommendedFor?: string;
+  description?: string;
 }
 
 export interface GeneralLineCoefficients {

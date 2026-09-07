@@ -99,7 +99,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-surface text-ink text-xs font-sans overflow-y-auto p-3.5 space-y-4">
+    <div className="h-full bg-surface text-ink text-xs font-sans overflow-y-auto p-3.5 space-y-4">
       {/* 1. SECCIÓN: FIGURA PREIMAGEN (OBJETO ORIGINAL F) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -170,7 +170,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
 
               {/* Métricas si es polígono cerrado */}
               {isPolygon && vertices.length >= 3 && (
-                <div className="p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-blue-950 dark:text-blue-200 font-mono text-[11px] flex justify-between">
+                <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 font-mono text-[12px] font-bold flex justify-between shadow-sm">
                   <span>Área = {polygonMetrics.area} u²</span>
                   <span>Perímetro = {polygonMetrics.perimeter} u</span>
                 </div>
@@ -203,7 +203,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
             {!isPolygon && segments.length > 0 && (
               <div className="space-y-1">
                 <span className="text-[10px] font-semibold text-ink-faint">Líneas / Segmentos activos:</span>
-                <div className="grid grid-cols-1 gap-1 max-h-24 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 gap-1 pr-1">
                   {segments.map(([a, b], sIdx) => {
                     const pA = vertices[a];
                     const pB = vertices[b];
@@ -236,7 +236,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
             {/* Lista de Vértices Originales */}
             <div className="space-y-1">
               <span className="text-[10px] font-semibold text-ink-faint">Coordenadas de vértices:</span>
-              <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+              <div className="space-y-1 pr-1">
                 {vertices.map((v, i) => (
                   <div
                     key={i}
@@ -275,7 +275,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
 
         <div className="p-2.5 rounded-2xl bg-panel border border-border space-y-2">
           {/* Toggle Líneas Guía */}
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center justify-between gap-2">
             <div className="flex-1">
               <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
                 <Compass className="h-3.5 w-3.5 text-rose-500" />
@@ -302,7 +302,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
               }`}
             >
               <div
-                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-0.75 left-0.75 ${
+                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${
                   toggles.showConstructionGuides ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
@@ -312,7 +312,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
           <div className="h-px bg-border/60" />
 
           {/* Toggle Medidas de Lados */}
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center justify-between gap-2">
             <div className="flex-1">
               <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
                 <Ruler className="h-3.5 w-3.5 text-blue-500" />
@@ -339,7 +339,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
               }`}
             >
               <div
-                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-0.75 left-0.75 ${
+                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${
                   toggles.showSideLengths ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
@@ -349,7 +349,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
           <div className="h-px bg-border/60" />
 
           {/* Toggle Coordenadas de Vértices */}
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center justify-between gap-2">
             <div className="flex-1">
               <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
                 {showLabels ? <Eye className="h-3.5 w-3.5 text-accent" /> : <EyeOff className="h-3.5 w-3.5 text-ink-soft" />}
@@ -366,7 +366,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
               }`}
             >
               <div
-                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-0.75 left-0.75 ${
+                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${
                   showLabels ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
@@ -404,7 +404,15 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
                   }
                   className="flex-1 accent-accent"
                 />
-                <span className="w-5 text-right font-bold">{config.dx}</span>
+                <input
+                  type="number"
+                  value={config.dx}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value);
+                    if (!isNaN(v)) onUpdateConfig((prev) => ({ ...prev, dx: v }));
+                  }}
+                  className="w-14 text-center font-bold bg-surface border border-border rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-accent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                />
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] text-ink-soft w-8 font-sans">Δy:</span>
@@ -418,7 +426,15 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
                   }
                   className="flex-1 accent-accent"
                 />
-                <span className="w-5 text-right font-bold">{config.dy}</span>
+                <input
+                  type="number"
+                  value={config.dy}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value);
+                    if (!isNaN(v)) onUpdateConfig((prev) => ({ ...prev, dy: v }));
+                  }}
+                  className="w-14 text-center font-bold bg-surface border border-border rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-accent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                />
               </div>
             </div>
           </div>
@@ -455,24 +471,37 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
             </div>
 
             {(config.reflectionAxis === 'custom_x' || config.reflectionAxis === 'custom_y') && (
-              <div className="pt-2 border-t border-border flex items-center gap-2 font-mono">
-                <span className="text-[10px] text-ink-soft">k =</span>
-                <input
-                  type="range"
-                  min="-10"
-                  max="10"
-                  value={config.customAxisValue}
-                  onChange={(e) =>
-                    onUpdateConfig((prev) => ({
-                      ...prev,
-                      customAxisValue: parseInt(e.target.value)
-                    }))
-                  }
-                  className="flex-1 accent-rose-600"
-                />
-                <span className="w-5 text-right font-bold text-rose-600">
-                  {config.customAxisValue}
-                </span>
+              <div className="pt-2 border-t border-border space-y-2">
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="text-[10px] text-ink-soft shrink-0">
+                    {config.reflectionAxis === 'custom_x' ? 'x = ' : 'y = '}
+                  </span>
+                  <input
+                    type="range"
+                    min="-10"
+                    max="10"
+                    value={config.customAxisValue}
+                    onChange={(e) =>
+                      onUpdateConfig((prev) => ({
+                        ...prev,
+                        customAxisValue: parseInt(e.target.value)
+                      }))
+                    }
+                    className="flex-1 accent-rose-600"
+                  />
+                  <input
+                    type="number"
+                    min="-20"
+                    max="20"
+                    value={config.customAxisValue}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value);
+                      if (!isNaN(v) && v >= -20 && v <= 20)
+                        onUpdateConfig((prev) => ({ ...prev, customAxisValue: v }));
+                    }}
+                    className="w-14 text-center font-bold text-rose-600 bg-surface border border-rose-300 rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-rose-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -581,20 +610,32 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
               <span>Razón k:</span>
               <span>{config.scaleFactor}x</span>
             </div>
-            <input
-              type="range"
-              min="-3"
-              max="3"
-              step="0.25"
-              value={config.scaleFactor}
-              onChange={(e) =>
-                onUpdateConfig((prev) => ({
-                  ...prev,
-                  scaleFactor: parseFloat(e.target.value)
-                }))
-              }
-              className="w-full accent-purple-600"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="-3"
+                max="3"
+                step="0.25"
+                value={config.scaleFactor}
+                onChange={(e) =>
+                  onUpdateConfig((prev) => ({
+                    ...prev,
+                    scaleFactor: parseFloat(e.target.value)
+                  }))
+                }
+                className="flex-1 accent-purple-600"
+              />
+              <input
+                type="number"
+                step="0.25"
+                value={config.scaleFactor}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  if (!isNaN(v) && v !== 0) onUpdateConfig((prev) => ({ ...prev, scaleFactor: v }));
+                }}
+                className="w-14 text-center font-bold text-purple-700 bg-surface border border-purple-300 rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-purple-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
             <div className="flex justify-between items-center pt-1 font-sans">
               <span className="text-ink-soft">Centro O:</span>
               <span className="font-mono text-purple-700 font-bold">

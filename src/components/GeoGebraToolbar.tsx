@@ -9,6 +9,7 @@ import {
   Maximize2,
   Trash2,
   Undo2,
+  Redo2,
   Shapes,
   Maximize,
   Minimize,
@@ -21,7 +22,8 @@ import {
   Sun,
   Moon,
   PanelRightClose,
-  PanelRightOpen
+  PanelRightOpen,
+  Download
 } from 'lucide-react';
 import { ToolMode, TransformationType } from '../types/geometry';
 import { BrandLogo } from './BrandLogo';
@@ -35,6 +37,8 @@ interface GeoGebraToolbarProps {
   onOpenPresets: () => void;
   onUndo: () => void;
   canUndo: boolean;
+  onRedo: () => void;
+  canRedo: boolean;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
   sidebarTab: 'algebra' | 'notebook' | 'problem';
@@ -42,6 +46,8 @@ interface GeoGebraToolbarProps {
   onOpenGuide: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
+  onExportPNG?: () => void;
+  onExportPDF?: () => void;
 }
 
 export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
@@ -53,15 +59,20 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
   onOpenPresets,
   onUndo,
   canUndo,
+  onRedo,
+  canRedo,
   isSidebarOpen,
   onToggleSidebar,
   sidebarTab,
   onSelectSidebarTab,
   onOpenGuide,
   isDarkMode,
-  onToggleDarkMode
+  onToggleDarkMode,
+  onExportPNG,
+  onExportPDF
 }) => {
   const [isTransformMenuOpen, setIsTransformMenuOpen] = useState(false);
+  const [isSaveMenuOpen, setIsSaveMenuOpen] = useState(false);
 
   const getTransformationIcon = (type: TransformationType) => {
     switch (type) {
@@ -94,9 +105,9 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
   };
 
   return (
-    <header className="relative z-40 flex items-center justify-between px-3 py-1.5 bg-surface border-b border-border shadow-sm select-none">
+    <header className="relative z-40 flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-surface border-b border-border shadow-sm select-none">
       {/* 1. BRANDING PROPIO: GEOTRANSFORM PRO */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
         <BrandLogo />
         <div className="h-5 w-px bg-border mx-1 hidden sm:block" />
 
@@ -242,14 +253,62 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
             <Trash2 className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Limpiar</span>
           </button>
+          
+          {/* BOTÓN GUARDAR (EXPORTAR) */}
+          <div className="relative ml-1">
+            <button
+              onClick={() => setIsSaveMenuOpen(!isSaveMenuOpen)}
+              title="Guardar / Exportar"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-accent text-white hover:bg-accent/90 transition shadow-sm"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Guardar</span>
+              <ChevronDown className="h-3 w-3 opacity-80" />
+            </button>
+            {isSaveMenuOpen && (
+              <div className="absolute top-full right-0 mt-1.5 w-40 rounded-2xl bg-surface border border-border shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={() => {
+                    if (onExportPDF) onExportPDF();
+                    setIsSaveMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2 w-full p-2 rounded-xl text-left text-ink hover:bg-panel transition text-xs font-medium"
+                >
+                  <FileText className="h-4 w-4 text-rose-500" />
+                  Guardar como PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (onExportPNG) onExportPNG();
+                    setIsSaveMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2 w-full p-2 rounded-xl text-left text-ink hover:bg-panel transition text-xs font-medium mt-1"
+                >
+                  <Download className="h-4 w-4 text-blue-500" />
+                  Guardar como PNG
+                </button>
+              </div>
+            )}
+          </div>
 
           <button
             onClick={onUndo}
             disabled={!canUndo}
-            title="Deshacer último vértice"
-            className="p-1.5 rounded-xl text-ink-soft hover:text-ink disabled:opacity-30 transition"
+            title="Deshacer (Ctrl+Z)"
+            className="flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold text-ink-soft hover:text-ink hover:bg-black/5 disabled:opacity-40 transition"
           >
-            <Undo2 className="h-4 w-4" />
+            <Undo2 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Deshacer</span>
+          </button>
+          
+          <button
+            onClick={onRedo}
+            disabled={!canRedo}
+            title="Rehacer (Ctrl+Y)"
+            className="flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold text-ink-soft hover:text-ink hover:bg-black/5 disabled:opacity-40 transition"
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Rehacer</span>
           </button>
         </div>
       </div>
@@ -344,10 +403,16 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
         {/* Botón Pantalla Completa (F11) */}
         <button
           onClick={() => {
-            if (!document.fullscreenElement) {
-              document.documentElement.requestFullscreen().catch(() => {});
+            const docEl = document.documentElement as any;
+            const doc = document as any;
+            if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
+              if (docEl.requestFullscreen) docEl.requestFullscreen().catch(() => {});
+              else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+              else if (docEl.msRequestFullscreen) docEl.msRequestFullscreen();
             } else {
-              document.exitFullscreen().catch(() => {});
+              if (doc.exitFullscreen) doc.exitFullscreen().catch(() => {});
+              else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+              else if (doc.msExitFullscreen) doc.msExitFullscreen();
             }
           }}
           title="Pantalla Completa"
