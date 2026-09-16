@@ -217,48 +217,11 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
       <button
         onClick={onClearCanvas}
         title="Limpiar Pizarra (Lienzo Vacío)"
-        className="flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition border border-transparent hover:border-rose-200 shrink-0"
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition shrink-0"
       >
         <Trash2 className="h-3.5 w-3.5 shrink-0" />
         <span className="hidden sm:inline">Limpiar</span>
       </button>
-      
-      {/* BOTÓN ABRIR (CARGAR IMAGEN O ARCHIVO DE PROYECTO) */}
-      <div className="relative shrink-0">
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0 && onLoadProject) {
-              onLoadProject(e.target.files[0]);
-            }
-            e.target.value = '';
-          }}
-          accept=".png,.geot,.json,image/png"
-          className="hidden"
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          title="Abrir imagen PNG o archivo de proyecto (.geot) para reanudar el trabajo"
-          className="flex items-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-semibold bg-panel border border-border text-ink hover:text-accent hover:border-accent transition shrink-0 shadow-xs"
-        >
-          <FolderOpen className="h-3.5 w-3.5 text-accent shrink-0" />
-          <span className="hidden sm:inline">Abrir</span>
-        </button>
-      </div>
-
-      {/* BOTÓN GUARDAR (EXPORTAR) */}
-      <div className="relative shrink-0">
-        <button
-          onClick={() => setIsSaveMenuOpen(true)}
-          title="Guardar / Exportar proyecto o imagen"
-          className="flex items-center gap-1 px-2 py-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-semibold bg-accent text-white hover:bg-accent/90 transition shadow-sm cursor-pointer active:scale-95"
-        >
-          <Download className="h-3.5 w-3.5 shrink-0" />
-          <span className="hidden sm:inline">Guardar</span>
-          <ChevronDown className="h-3 w-3 opacity-80 shrink-0" />
-        </button>
-      </div>
 
       <div className="h-4 w-px bg-border mx-0.5 shrink-0" />
 
@@ -266,103 +229,122 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
         onClick={onUndo}
         disabled={!canUndo}
         title="Deshacer (Ctrl+Z)"
-        className="flex items-center gap-1 p-1.5 sm:px-2 sm:py-1.5 rounded-xl text-xs font-semibold text-ink-soft hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 transition shrink-0"
+        className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-ink-soft hover:text-ink hover:bg-panel disabled:opacity-30 transition shrink-0"
       >
         <Undo2 className="h-3.5 w-3.5" />
-        <span className="hidden lg:inline">Deshacer</span>
+        <span className="hidden sm:inline">Deshacer</span>
       </button>
-      
+
       <button
         onClick={onRedo}
         disabled={!canRedo}
         title="Rehacer (Ctrl+Y)"
-        className="flex items-center gap-1 p-1.5 sm:px-2 sm:py-1.5 rounded-xl text-xs font-semibold text-ink-soft hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-40 transition shrink-0"
+        className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-ink-soft hover:text-ink hover:bg-panel disabled:opacity-30 transition shrink-0"
       >
         <Redo2 className="h-3.5 w-3.5" />
-        <span className="hidden lg:inline">Rehacer</span>
+        <span className="hidden sm:inline">Rehacer</span>
       </button>
     </div>
   );
 
   return (
     <header className="relative z-40 flex flex-col bg-surface border-b border-border shadow-sm select-none">
-      {/* FILA 1: BRANDING + NAVEGACIÓN Y CONTROLES GLOBALES */}
+      {/* FILA 1: CABECERA SUPERIOR - BRANDING + PESTAÑAS DE VISTA + ARCHIVO Y AJUSTES GLOBALES */}
       <div className="flex items-center justify-between gap-2 px-2.5 sm:px-3 py-1.5">
-        {/* LOGO (COMPACTO EN PANTALLAS PEQUEÑAS, COMPLETO EN ESCRITORIO) */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* LADO IZQUIERDO: LOGO (COMPLETAMENTE AISLADO, SIN SUPERPOSICIÓN) */}
+        <div className="flex items-center gap-2 shrink-0 mr-1 sm:mr-2">
           <BrandLogo className="hidden sm:flex" />
           <BrandLogo compact className="flex sm:hidden" />
         </div>
 
-        {/* HERRAMIENTAS EN ESCRITORIO (>= 1024px / lg:) */}
-        <div className="hidden lg:flex items-center gap-2 flex-1 justify-center max-w-2xl">
-          <div className="flex items-center gap-1 bg-panel p-1 rounded-xl border border-border shrink-0">
-            {renderGeometryTools()}
-          </div>
-          {renderActionButtons()}
+        {/* CENTRO: SELECTOR DE VISTAS (ÁLGEBRA / CUADERNO / PROBLEMAS) EN PANTALLAS MD Y SUPERIORES */}
+        <div className="hidden md:flex items-center rounded-xl bg-panel p-0.5 border border-border shrink-0 shadow-xs">
+          <button
+            onClick={() => {
+              if (isSidebarOpen && sidebarTab === 'algebra') {
+                onToggleSidebar();
+              } else {
+                onSelectSidebarTab('algebra');
+                if (!isSidebarOpen) onToggleSidebar();
+              }
+            }}
+            title={isSidebarOpen && sidebarTab === 'algebra' ? 'Clic para ocultar panel' : 'Ver Álgebra'}
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
+              isSidebarOpen && sidebarTab === 'algebra'
+                ? 'bg-surface text-accent shadow-xs'
+                : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            Álgebra
+          </button>
+          <button
+            onClick={() => {
+              onSelectSidebarTab('notebook');
+              if (!isSidebarOpen) onToggleSidebar();
+            }}
+            title={isSidebarOpen && sidebarTab === 'notebook' ? 'Clic para ocultar panel' : 'Ver Cuaderno'}
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
+              isSidebarOpen && sidebarTab === 'notebook'
+                ? 'bg-surface text-accent shadow-xs'
+                : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            Cuaderno
+          </button>
+          <button
+            onClick={() => {
+              onSelectSidebarTab('problem');
+              if (!isSidebarOpen) onToggleSidebar();
+            }}
+            title={isSidebarOpen && sidebarTab === 'problem' ? 'Clic para ocultar panel' : 'Ver Problemas Inversos'}
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
+              isSidebarOpen && sidebarTab === 'problem'
+                ? 'bg-surface text-emerald-700 dark:text-emerald-400 shadow-xs'
+                : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            Problemas
+          </button>
         </div>
 
-        {/* LADO DERECHO: PESTAÑAS DE VISTA, TEORÍA Y ACCIONES RÁPIDAS */}
+        {/* LADO DERECHO: ACCIONES DE ARCHIVO, TEORÍA, MODO OSCURO Y PANTALLA COMPLETA */}
         <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          {/* Selector de Pestañas GeoTransform (Álgebra / Cuaderno / Problemas) en Escritorio */}
-          <div className="hidden lg:flex rounded-xl bg-panel p-0.5 sm:p-1 border border-border">
-            <button
-              onClick={() => {
-                if (isSidebarOpen && sidebarTab === 'algebra') {
-                  onToggleSidebar();
-                } else {
-                  onSelectSidebarTab('algebra');
-                  if (!isSidebarOpen) onToggleSidebar();
-                }
-              }}
-              title={isSidebarOpen && sidebarTab === 'algebra' ? 'Clic para ocultar panel' : 'Ver Álgebra'}
-              className={`px-2 sm:px-2.5 py-1 text-xs font-bold rounded-lg transition ${
-                isSidebarOpen && sidebarTab === 'algebra'
-                  ? 'bg-surface text-accent shadow-sm'
-                  : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              Álgebra
-            </button>
-            <button
-              onClick={() => {
-                if (isSidebarOpen && sidebarTab === 'notebook') {
-                  onToggleSidebar();
-                } else {
-                  onSelectSidebarTab('notebook');
-                  if (!isSidebarOpen) onToggleSidebar();
-                }
-              }}
-              title={isSidebarOpen && sidebarTab === 'notebook' ? 'Clic para ocultar panel' : 'Ver Cuaderno'}
-              className={`px-2 sm:px-2.5 py-1 text-xs font-bold rounded-lg transition ${
-                isSidebarOpen && sidebarTab === 'notebook'
-                  ? 'bg-surface text-accent shadow-sm'
-                  : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              Cuaderno
-            </button>
-            <button
-              onClick={() => {
-                if (isSidebarOpen && sidebarTab === 'problem') {
-                  onToggleSidebar();
-                } else {
-                  onSelectSidebarTab('problem');
-                  if (!isSidebarOpen) onToggleSidebar();
-                }
-              }}
-              title={isSidebarOpen && sidebarTab === 'problem' ? 'Clic para ocultar panel' : 'Ver Problemas Inversos'}
-              className={`px-2 sm:px-2.5 py-1 text-xs font-bold rounded-lg transition ${
-                isSidebarOpen && sidebarTab === 'problem'
-                  ? 'bg-surface text-emerald-700 dark:text-emerald-400 shadow-sm'
-                  : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              Problemas
-            </button>
-          </div>
+          {/* BOTÓN ABRIR PROYECTO O IMAGEN */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0 && onLoadProject) {
+                onLoadProject(e.target.files[0]);
+              }
+              e.target.value = '';
+            }}
+            accept=".png,.geot,.json,image/png"
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title="Abrir imagen PNG o archivo de proyecto (.geot)"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-panel border border-border text-ink hover:text-accent hover:border-accent transition shrink-0 shadow-xs cursor-pointer active:scale-95"
+          >
+            <FolderOpen className="h-3.5 w-3.5 text-accent shrink-0" />
+            <span className="hidden sm:inline">Abrir</span>
+          </button>
 
-          {/* Botón Configurar en Móvil y Tablet (< 1024px) */}
+          {/* BOTÓN GUARDAR / EXPORTAR */}
+          <button
+            onClick={() => setIsSaveMenuOpen(true)}
+            title="Guardar / Exportar proyecto o imagen"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-accent text-white hover:bg-accent/90 transition shadow-sm shrink-0 cursor-pointer active:scale-95"
+          >
+            <Download className="h-3.5 w-3.5 shrink-0" />
+            <span className="hidden sm:inline">Guardar</span>
+            <ChevronDown className="h-3 w-3 opacity-80 shrink-0" />
+          </button>
+
+          <div className="h-4 w-px bg-border mx-0.5 shrink-0" />
+
+          {/* BOTÓN CONFIGURAR EN MÓVIL (< 1024px) */}
           <button
             onClick={onToggleSidebar}
             title={isSidebarOpen ? 'Cerrar panel de configuración' : 'Abrir panel de configuración'}
@@ -376,17 +358,17 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
             <span>{isSidebarOpen ? 'Cerrar' : 'Configurar'}</span>
           </button>
 
-          {/* Botón Zona de Teoría */}
+          {/* BOTÓN ZONA DE TEORÍA */}
           <button
             onClick={onOpenTheory}
             title="Abrir Zona de Teoría completa (Fórmulas, Propiedades y Gráficos)"
-            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-panel border border-border text-ink hover:border-accent hover:text-accent shadow-sm text-xs font-bold transition shrink-0"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-panel border border-border text-ink hover:border-accent hover:text-accent shadow-xs text-xs font-bold transition shrink-0"
           >
             <BookOpen className="h-4 w-4 text-accent shrink-0" />
             <span className="hidden md:inline">Teoría</span>
           </button>
 
-          {/* Botón Ocultar / Mostrar Panel Lateral en Escritorio */}
+          {/* BOTÓN OCULTAR / MOSTRAR PANEL LATERAL EN ESCRITORIO */}
           <button
             onClick={onToggleSidebar}
             title={isSidebarOpen ? 'Ocultar panel lateral (Área máxima de pizarra)' : 'Mostrar panel lateral'}
@@ -400,7 +382,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
             <span>{isSidebarOpen ? 'Ocultar' : 'Ver Panel'}</span>
           </button>
 
-          {/* Botón Modo Oscuro / Modo Claro */}
+          {/* MODO OSCURO */}
           <button
             onClick={onToggleDarkMode}
             title={isDarkMode ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
@@ -413,7 +395,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
             )}
           </button>
 
-          {/* Botón Pantalla Completa (F11) - Oculto en móviles para ahorrar espacio */}
+          {/* PANTALLA COMPLETA */}
           <button
             onClick={() => {
               const docEl = document.documentElement as any;
@@ -436,12 +418,14 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
         </div>
       </div>
 
-      {/* FILA 2: SUB-BARRA DE HERRAMIENTAS HORIZONTAL FLUIDA PARA MÓVIL Y TABLET (< 1024px) */}
-      <div className="lg:hidden flex items-center gap-1.5 px-2.5 py-1.5 bg-panel/70 border-t border-border/70 overflow-x-auto no-scrollbar shrink-0">
-        <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border shrink-0 shadow-xs">
+      {/* FILA 2: BARRA DEDICADA DE HERRAMIENTAS GEOMÉTRICAS Y EDICIÓN (DESKTOP, TABLET Y MÓVIL) */}
+      <div className="flex items-center justify-start lg:justify-center gap-2 px-2.5 sm:px-3 py-1.5 bg-panel/75 border-t border-border/80 overflow-x-auto no-scrollbar shrink-0">
+        <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border shadow-xs shrink-0">
           {renderGeometryTools()}
         </div>
-        {renderActionButtons()}
+        <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border shadow-xs shrink-0">
+          {renderActionButtons()}
+        </div>
       </div>
 
       {/* MODAL GLOBAL: SELECTOR DE TRANSFORMACIÓN (100% RESPONSIVE, LIBRE DE OVERFLOW) */}

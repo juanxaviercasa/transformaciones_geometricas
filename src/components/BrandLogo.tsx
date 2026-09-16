@@ -7,11 +7,10 @@ interface BrandLogoProps {
 
 export const BrandLogo: React.FC<BrandLogoProps> = ({ compact = false, className = '' }) => {
   return (
-    <div className={`flex items-center gap-2.5 select-none ${className}`}>
+    <div className={`flex items-center gap-2.5 select-none shrink-0 ${className}`}>
       {/* ISOTIPO GEOMÉTRICO DINÁMICO */}
-      <div className="relative group cursor-pointer">
-        <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl blur-sm opacity-50 group-hover:opacity-100 transition duration-300" />
-        <div className="relative flex items-center justify-center h-9 w-9 rounded-2xl bg-surface border border-border shadow-md overflow-hidden p-1.5">
+      <div className="relative shrink-0 cursor-pointer">
+        <div className="relative flex items-center justify-center h-9 w-9 rounded-xl bg-gradient-to-br from-surface to-panel border border-border shadow-sm overflow-hidden p-1 hover:border-accent/50 transition">
           <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
             <defs>
               <linearGradient id="gtGradPre" x1="4" y1="4" x2="24" y2="24" gradientUnits="userSpaceOnUse">

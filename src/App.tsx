@@ -93,7 +93,12 @@ export default function App() {
                     : 'bg-panel border-transparent text-ink-soft hover:bg-black/5 dark:hover:bg-white/5 z-0'
                 }`}
               >
-                <Monitor className={`h-4 w-4 shrink-0 ${activeTabId === tab.id ? 'text-accent' : 'text-ink-faint'}`} />
+                <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0">
+                  <polygon points="6,30 18,8 24,26" fill={activeTabId === tab.id ? '#3b82f6' : '#94a3b8'} fillOpacity="0.9" />
+                  <polygon points="16,34 32,12 36,28" fill={activeTabId === tab.id ? '#a855f7' : '#cbd5e1'} fillOpacity="0.8" />
+                  <circle cx="18" cy="8" r="2.5" fill="#60a5fa" />
+                  <circle cx="32" cy="12" r="2.5" fill="#c084fc" />
+                </svg>
                 
                 {editingTabId === tab.id ? (
                   <input
