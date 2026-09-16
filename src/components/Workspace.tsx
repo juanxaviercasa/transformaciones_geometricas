@@ -50,7 +50,8 @@ import {
   ProblemMode,
   ProblemScenario,
   ClassroomToggles,
-  AppSettings
+  AppSettings,
+  GeoProjectData
 } from '../types/geometry';
 import {
   solveGeometryProblem,
@@ -67,6 +68,7 @@ import { TheoryPage } from './TheoryPage';
 import { InteractiveGuideModal } from './InteractiveGuideModal';
 import { PolygonPreview } from './PolygonPreview';
 import { SHAPE_PRESETS } from '../utils/transformations';
+import { embedProjectInPNG, extractProjectFromPNG } from '../utils/pngMetadata';
 
 import jsPDF from 'jspdf';
 
@@ -124,7 +126,13 @@ export function Workspace({
 
   // 5. PESTAÑAS DEL PANEL LATERAL RESPONSIVO
   const [sidebarTab, setSidebarTab] = useState<'algebra' | 'notebook' | 'problem'>('algebra');
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  // Por defecto SIEMPRE oculto en móvil y tableta para mostrar el plano cartesiano completo inmediatamente
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1280; // Solo en monitores anchos de escritorio
+    }
+    return false;
+  });
   const [isTheoryOpen, setIsTheoryOpen] = useState<boolean>(false);
 
   // 6. TOGGLES DE INSPECCIÓN
@@ -156,12 +164,67 @@ export function Workspace({
   const [isHoveringPivot, setIsHoveringPivot] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [canvasDimensions, setCanvasDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+
   const isDraggingCanvasRef = useRef(false);
   const draggingVertexIndexRef = useRef<number | null>(null);
   const isDraggingPivotRef = useRef(false);
   const isDraggingReflectionLineRef = useRef(false);
   const [isHoveringReflectionLine, setIsHoveringReflectionLine] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
+
+  // OBSERVADOR DE REDIMENSIONAMIENTO PARA MÁXIMA NITIDEZ (Cero desenfoque al ocultar/mostrar panel o rotar pantalla)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setCanvasDimensions({ width: Math.round(width), height: Math.round(height) });
+        }
+      }
+    });
+
+    ro.observe(container);
+
+    const rect = container.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setCanvasDimensions({ width: Math.round(rect.width), height: Math.round(rect.height) });
+    }
+
+    const handleWindowResize = () => {
+      if (container) {
+        const r = container.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          setCanvasDimensions({ width: Math.round(r.width), height: Math.round(r.height) });
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    window.addEventListener('orientationchange', handleWindowResize);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('orientationchange', handleWindowResize);
+    };
+  }, [isActive, isSidebarOpen]);
+
+  // Asegurar que en móvil y tablet (< 1024px) el panel esté SIEMPRE cerrado al iniciar o cambiar de tamaño
+  useEffect(() => {
+    const handleCheckMobile = () => {
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+        setIsSidebarOpen(false);
+      }
+    };
+    handleCheckMobile();
+    window.addEventListener('resize', handleCheckMobile);
+    return () => window.removeEventListener('resize', handleCheckMobile);
+  }, []);
 
   // 10. MENÚ CONTEXTUAL (CLIC DERECHO)
   const [contextMenu, setContextMenu] = useState<{
@@ -411,12 +474,15 @@ export function Workspace({
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
+    const width = canvasDimensions.width || rect.width;
+    const height = canvasDimensions.height || rect.height;
 
-    const width = rect.width;
-    const height = rect.height;
+    if (width <= 0 || height <= 0) return;
+
+    // Configuración física interna en píxeles del dispositivo (Retina/High-DPI)
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Ajustes por defecto
     const baseLW = lineThickness === 'thin' ? 1 : lineThickness === 'thick' ? 3.5 : 2;
@@ -1200,6 +1266,8 @@ export function Workspace({
     });
   }, [
     isActive,
+    canvasDimensions,
+    isSidebarOpen,
     vertices,
     segments,
     isPolygon,
@@ -1217,42 +1285,41 @@ export function Workspace({
     activePivot,
     hoveredVertexIndex,
     isHoveringPivot,
-    isDarkMode
+    isDarkMode,
+    pointSize,
+    lineThickness
   ]);
 
-  // MANEJO DE EVENTOS DEL RATÓN EN EL LIENZO
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.clientX - rect.left;
-    const clientY = e.clientY - rect.top;
-
+  // LÓGICA DE INTERACCIÓN UNIFICADA (MOUSE Y TOUCH TÁCTIL)
+  const handleInteractionStart = (
+    clientX: number,
+    clientY: number,
+    screenX: number,
+    screenY: number,
+    width: number,
+    height: number
+  ) => {
     // Herramienta Punto: colocar vértice libre independiente en el plano
     if (tool === 'point') {
       commitAction();
-      const cart = toCartesian(clientX, clientY, rect.width, rect.height);
+      const cart = toCartesian(clientX, clientY, width, height);
       const nextLabel = String.fromCharCode(65 + vertices.length);
       setVertices((prev) => [...prev, { x: cart.x, y: cart.y, label: nextLabel, color: defaultColor }]);
-      // No conecta segmentos, no cierra polígono. Puntos 100% libres.
       return;
     }
 
     // Herramienta Segmento: conectar dos puntos o crear puntos y unirlos
     if (tool === 'segment') {
-      const cart = toCartesian(clientX, clientY, rect.width, rect.height);
-
-      // Buscar si hizo clic cerca de un vértice existente
+      const cart = toCartesian(clientX, clientY, width, height);
       let targetIndex: number | null = null;
       for (let i = 0; i < vertices.length; i++) {
-        const vScr = toScreen(vertices[i], rect.width, rect.height);
-        if (Math.hypot(clientX - vScr.x, clientY - vScr.y) <= 15) {
+        const vScr = toScreen(vertices[i], width, height);
+        if (Math.hypot(clientX - vScr.x, clientY - vScr.y) <= 18) {
           targetIndex = i;
           break;
         }
       }
 
-      // Si no hay vértice donde hizo clic, creamos uno nuevo en esa posición
       if (targetIndex === null) {
         commitAction();
         targetIndex = vertices.length;
@@ -1261,10 +1328,8 @@ export function Workspace({
       }
 
       if (segmentStartVertex === null) {
-        // Primer clic: seleccionar vértice de inicio
         setSegmentStartVertex(targetIndex);
       } else {
-        // Segundo clic: unir vértice de inicio con este vértice destino
         if (targetIndex !== segmentStartVertex) {
           const from = segmentStartVertex;
           const to = targetIndex;
@@ -1282,14 +1347,11 @@ export function Workspace({
 
     // Herramienta Polígono: crear figura cerrada
     if (tool === 'polygon') {
-      const cart = toCartesian(clientX, clientY, rect.width, rect.height);
-
-      // Si hace clic cerca del primer vértice para cerrar:
+      const cart = toCartesian(clientX, clientY, width, height);
       if (vertices.length >= 3) {
-        const firstScr = toScreen(vertices[0], rect.width, rect.height);
-        if (Math.hypot(clientX - firstScr.x, clientY - firstScr.y) <= 16) {
+        const firstScr = toScreen(vertices[0], width, height);
+        if (Math.hypot(clientX - firstScr.x, clientY - firstScr.y) <= 20) {
           setIsPolygon(true);
-          // Asegurar segmentos de cierre
           const segs: [number, number][] = [];
           for (let i = 0; i < vertices.length; i++) {
             segs.push([i, (i + 1) % vertices.length]);
@@ -1313,7 +1375,7 @@ export function Workspace({
     // Modo Colocar Pivote
     if (tool === 'pivot') {
       commitAction();
-      const cart = toCartesian(clientX, clientY, rect.width, rect.height);
+      const cart = toCartesian(clientX, clientY, width, height);
       if (config.type === 'rotation') {
         setConfig((prev) => ({ ...prev, center: cart }));
       } else if (config.type === 'homothety') {
@@ -1327,34 +1389,34 @@ export function Workspace({
 
     // Modo Mover (Select): Verificar si arrastra el centro pivote
     if (activePivot) {
-      const pScr = toScreen(activePivot, rect.width, rect.height);
-      if (Math.hypot(clientX - pScr.x, clientY - pScr.y) <= 15) {
+      const pScr = toScreen(activePivot, width, height);
+      if (Math.hypot(clientX - pScr.x, clientY - pScr.y) <= 20) {
         commitAction();
         isDraggingPivotRef.current = true;
-        dragStartRef.current = { x: e.clientX, y: e.clientY };
+        dragStartRef.current = { x: screenX, y: screenY };
         return;
       }
     }
 
     // Modo Mover (Select): Verificar si arrastra un vértice original
     for (let i = 0; i < vertices.length; i++) {
-      const vScr = toScreen(vertices[i], rect.width, rect.height);
-      if (Math.hypot(clientX - vScr.x, clientY - vScr.y) <= 14) {
+      const vScr = toScreen(vertices[i], width, height);
+      if (Math.hypot(clientX - vScr.x, clientY - vScr.y) <= 18) {
         commitAction();
         draggingVertexIndexRef.current = i;
-        dragStartRef.current = { x: e.clientX, y: e.clientY };
+        dragStartRef.current = { x: screenX, y: screenY };
         return;
       }
     }
 
     // Modo Mover (Select): Verificar si arrastra el eje de reflexión
     if (tool === 'select' && config.type === 'reflection' && (config.reflectionAxis === 'custom_x' || config.reflectionAxis === 'custom_y')) {
-      const cartRaw = toCartesian(clientX, clientY, rect.width, rect.height, false);
+      const cartRaw = toCartesian(clientX, clientY, width, height, false);
       let isNearLine = false;
       if (config.reflectionAxis === 'custom_x') {
-         isNearLine = Math.abs(cartRaw.x - config.customAxisValue) * (scale / 20) < 1; // roughly 20px threshold
+        isNearLine = Math.abs(cartRaw.x - config.customAxisValue) * (scale / 20) < 1;
       } else {
-         isNearLine = Math.abs(cartRaw.y - config.customAxisValue) * (scale / 20) < 1;
+        isNearLine = Math.abs(cartRaw.y - config.customAxisValue) * (scale / 20) < 1;
       }
       if (isNearLine) {
         commitAction();
@@ -1365,17 +1427,18 @@ export function Workspace({
 
     // Desplazar el plano (Pan)
     isDraggingCanvasRef.current = true;
-    dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    dragStartRef.current = { x: screenX - pan.x, y: screenY - pan.y };
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.clientX - rect.left;
-    const clientY = e.clientY - rect.top;
-
-    const cart = toCartesian(clientX, clientY, rect.width, rect.height);
+  const handleInteractionMove = (
+    clientX: number,
+    clientY: number,
+    screenX: number,
+    screenY: number,
+    width: number,
+    height: number
+  ) => {
+    const cart = toCartesian(clientX, clientY, width, height);
     setMouseCoord(cart);
 
     if (isDraggingPivotRef.current && activePivot) {
@@ -1408,40 +1471,121 @@ export function Workspace({
 
     if (isDraggingCanvasRef.current) {
       setPan({
-        x: e.clientX - dragStartRef.current.x,
-        y: e.clientY - dragStartRef.current.y
+        x: screenX - dragStartRef.current.x,
+        y: screenY - dragStartRef.current.y
       });
       return;
     }
 
     // Hover sobre pivote o vértices o línea de reflexión
     if (activePivot) {
-      const pScr = toScreen(activePivot, rect.width, rect.height);
-      setIsHoveringPivot(Math.hypot(clientX - pScr.x, clientY - pScr.y) <= 15);
+      const pScr = toScreen(activePivot, width, height);
+      setIsHoveringPivot(Math.hypot(clientX - pScr.x, clientY - pScr.y) <= 18);
     } else {
       setIsHoveringPivot(false);
     }
 
     let foundLineHover = false;
     if (tool === 'select' && config.type === 'reflection' && (config.reflectionAxis === 'custom_x' || config.reflectionAxis === 'custom_y')) {
-      const cartRaw = toCartesian(clientX, clientY, rect.width, rect.height, false);
+      const cartRaw = toCartesian(clientX, clientY, width, height, false);
       if (config.reflectionAxis === 'custom_x') {
-         foundLineHover = Math.abs(cartRaw.x - config.customAxisValue) * (scale / 20) < 1;
+        foundLineHover = Math.abs(cartRaw.x - config.customAxisValue) * (scale / 20) < 1;
       } else {
-         foundLineHover = Math.abs(cartRaw.y - config.customAxisValue) * (scale / 20) < 1;
+        foundLineHover = Math.abs(cartRaw.y - config.customAxisValue) * (scale / 20) < 1;
       }
     }
     setIsHoveringReflectionLine(foundLineHover);
 
     let foundIdx: number | null = null;
     for (let i = 0; i < vertices.length; i++) {
-      const vScr = toScreen(vertices[i], rect.width, rect.height);
-      if (Math.hypot(clientX - vScr.x, clientY - vScr.y) <= 14) {
+      const vScr = toScreen(vertices[i], width, height);
+      if (Math.hypot(clientX - vScr.x, clientY - vScr.y) <= 16) {
         foundIdx = i;
         break;
       }
     }
     setHoveredVertexIndex(foundIdx);
+  };
+
+  // MANEJO DE EVENTOS DEL RATÓN
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const clientY = e.clientY - rect.top;
+    handleInteractionStart(clientX, clientY, e.clientX, e.clientY, rect.width, rect.height);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const clientY = e.clientY - rect.top;
+    handleInteractionMove(clientX, clientY, e.clientX, e.clientY, rect.width, rect.height);
+  };
+
+  // MANEJO DE EVENTOS TÁCTILES PARA MÓVIL Y TABLET (TOUCH)
+  const touchStartRef = useRef<{ x: number; y: number; dist: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const clientX = touch.clientX - rect.left;
+      const clientY = touch.clientY - rect.top;
+      touchStartRef.current = { x: clientX, y: clientY, dist: 0 };
+      handleInteractionStart(clientX, clientY, touch.clientX, touch.clientY, rect.width, rect.height);
+    } else if (e.touches.length === 2) {
+      // Gesto de 2 dedos (Pinch-to-zoom / Pan con 2 dedos)
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      touchStartRef.current = { x: midX, y: midY, dist };
+      isDraggingCanvasRef.current = true;
+      dragStartRef.current = { x: midX - pan.x, y: midY - pan.y };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const clientX = touch.clientX - rect.left;
+      const clientY = touch.clientY - rect.top;
+      handleInteractionMove(clientX, clientY, touch.clientX, touch.clientY, rect.width, rect.height);
+    } else if (e.touches.length === 2 && touchStartRef.current && touchStartRef.current.dist > 0) {
+      // Zoom por pellizco (Pinch-to-zoom)
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const newDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+
+      const factor = newDist / touchStartRef.current.dist;
+      setScale((prev) => Math.min(Math.max(prev * factor, 12), 140));
+      touchStartRef.current.dist = newDist;
+
+      // Desplazamiento panorámico con 2 dedos
+      setPan({
+        x: midX - dragStartRef.current.x,
+        y: midY - dragStartRef.current.y
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    handleMouseUp();
+    touchStartRef.current = null;
   };
 
   const handleContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1454,7 +1598,7 @@ export function Workspace({
 
     if (activePivot) {
       const pScr = toScreen(activePivot, rect.width, rect.height);
-      if (Math.hypot(clientX - pScr.x, clientY - pScr.y) <= 15) {
+      if (Math.hypot(clientX - pScr.x, clientY - pScr.y) <= 18) {
         setContextMenu({ visible: true, x: e.clientX, y: e.clientY, targetType: 'pivot' });
         return;
       }
@@ -1462,7 +1606,7 @@ export function Workspace({
 
     for (let i = 0; i < vertices.length; i++) {
       const vScr = toScreen(vertices[i], rect.width, rect.height);
-      if (Math.hypot(clientX - vScr.x, clientY - vScr.y) <= 14) {
+      if (Math.hypot(clientX - vScr.x, clientY - vScr.y) <= 16) {
         setContextMenu({ visible: true, x: e.clientX, y: e.clientY, targetType: 'vertex', targetIndex: i });
         return;
       }
@@ -1478,8 +1622,19 @@ export function Workspace({
     isDraggingReflectionLineRef.current = false;
   };
 
-  // Exportar PNG de alta resolución
-  const handleExportPNG = () => {
+  // Estado para alertas o notificaciones de proyecto (toast flotante)
+  const [projectToast, setProjectToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setProjectToast({ message, type });
+    setTimeout(() => {
+      setProjectToast(null);
+    }, 4500);
+  };
+
+  // Exportar PNG de alta resolución con metadatos de proyecto integrados (Smart PNG)
+  const handleExportPNG = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -1499,11 +1654,117 @@ export function Workspace({
     ctx.textAlign = 'left';
     ctx.fillText('GeoTransform Pro • Laboratorio de Geometría Dinámica', 20, 30);
 
-    const dataUrl = exportCanvas.toDataURL('image/png');
+    const projectData: GeoProjectData = {
+      appName: 'GeoTransform Pro',
+      version: '1.0',
+      timestamp: Date.now(),
+      vertices,
+      segments,
+      isPolygon,
+      config,
+      gridStyle,
+      scale,
+      pan,
+      customStatement,
+      problemMode
+    };
+
+    exportCanvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        const smartBlob = await embedProjectInPNG(blob, projectData);
+        const url = URL.createObjectURL(smartBlob);
+        const link = document.createElement('a');
+        link.download = `geotransform_${config.type}_${Date.now()}.png`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+        showToast('¡Imagen PNG guardada con proyecto editable integrado!', 'success');
+      } catch (err) {
+        console.error(err);
+        const dataUrl = exportCanvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `geotransform_${config.type}_${Date.now()}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
+    }, 'image/png');
+  };
+
+  // Exportar archivo de proyecto (.geot / JSON)
+  const handleExportProjectJSON = () => {
+    const projectData: GeoProjectData = {
+      appName: 'GeoTransform Pro',
+      version: '1.0',
+      timestamp: Date.now(),
+      vertices,
+      segments,
+      isPolygon,
+      config,
+      gridStyle,
+      scale,
+      pan,
+      customStatement,
+      problemMode
+    };
+
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.download = `geotransform_${config.type}_${Date.now()}.png`;
-    link.href = dataUrl;
+    link.download = `geotransform_proyecto_${Date.now()}.geot`;
+    link.href = url;
     link.click();
+    URL.revokeObjectURL(url);
+    showToast('¡Archivo de proyecto (.geot) descargado exitosamente!', 'success');
+  };
+
+  // Cargar proyecto desde archivo (PNG con metadatos o archivo .geot / .json)
+  const handleLoadProjectFile = async (file: File) => {
+    try {
+      const project = await extractProjectFromPNG(file);
+      if (!project) {
+        showToast(
+          'La imagen o archivo no contiene un proyecto válido de GeoTransform. Asegúrate de usar una imagen PNG descargada desde esta aplicación.',
+          'error'
+        );
+        return;
+      }
+
+      commitAction();
+
+      if (Array.isArray(project.vertices)) {
+        setVertices(project.vertices);
+      }
+      if (Array.isArray(project.segments)) {
+        setSegments(project.segments);
+      }
+      if (typeof project.isPolygon === 'boolean') {
+        setIsPolygon(project.isPolygon);
+      }
+      if (project.config) {
+        setConfig(project.config);
+      }
+      if (project.gridStyle) {
+        setGridStyle(project.gridStyle);
+      }
+      if (typeof project.scale === 'number') {
+        setScale(project.scale);
+      }
+      if (project.pan) {
+        setPan(project.pan);
+      }
+      if (project.customStatement) {
+        setCustomStatement(project.customStatement);
+      }
+      if (project.problemMode) {
+        setProblemMode(project.problemMode);
+      }
+
+      showToast(`¡Proyecto "${file.name}" cargado exitosamente!`, 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Hubo un error al procesar el archivo seleccionado.', 'error');
+    }
   };
 
   // Exportar PDF
@@ -1539,9 +1800,40 @@ export function Workspace({
 
   return (
     <div 
-      className="absolute inset-0 flex flex-col w-full h-full overflow-hidden bg-surface text-ink font-sans select-none"
+      className="absolute inset-0 flex flex-col w-full h-full overflow-hidden bg-surface text-ink font-sans select-none relative"
       style={{ display: isActive ? 'flex' : 'none' }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingFile(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingFile(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingFile(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          handleLoadProjectFile(e.dataTransfer.files[0]);
+        }
+      }}
     >
+      {/* OVERLAY DE ARRASTRE DE ARCHIVOS (DRAG & DROP) */}
+      {isDraggingFile && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-accent/20 backdrop-blur-sm border-4 border-dashed border-accent m-4 rounded-3xl pointer-events-none animate-in fade-in duration-150">
+          <div className="p-6 rounded-2xl bg-surface/95 shadow-2xl border border-border flex flex-col items-center gap-3 text-center max-w-sm">
+            <Download className="h-10 w-10 text-accent animate-bounce" />
+            <h4 className="text-base font-bold text-ink">Suelta tu imagen o archivo aquí</h4>
+            <p className="text-xs text-ink-soft">
+              Reconoceremos automáticamente las figuras, coordenadas y transformaciones guardadas.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 1. BARRA DE HERRAMIENTAS SUPERIOR ESTILO GEOGEBRA */}
       <GeoGebraToolbar
         activeTool={tool}
@@ -1564,40 +1856,42 @@ export function Workspace({
         onToggleDarkMode={() => setSettings(prev => ({ ...prev, isDarkMode: !prev.isDarkMode }))}
         onExportPNG={handleExportPNG}
         onExportPDF={handleExportPDF}
+        onExportProjectJSON={handleExportProjectJSON}
+        onLoadProject={handleLoadProjectFile}
       />
 
       {/* 2. SUB-BARRA DE INSTRUCCIONES CONTEXTUALES GEOGEBRA */}
-      <div className="flex items-center justify-between px-4 py-1.5 bg-panel/80 border-b border-border text-xs">
-        <div className="flex items-center gap-2 text-ink-soft">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-1 sm:py-1.5 bg-panel/80 border-b border-border text-xs min-h-[32px] shrink-0">
+        <div className="flex items-center gap-1.5 text-ink-soft overflow-hidden mr-2">
           <Info className="h-3.5 w-3.5 text-accent shrink-0" />
-          <span className="font-medium">
-            {tool === 'select' && 'Mover: Arrastra vértices, el centro o arrastra el fondo para desplazar el plano.'}
-            {tool === 'point' && 'Punto: Haz clic en el plano cartesiano para marcar puntos libres sin unirlos.'}
+          <span className="font-medium truncate text-[11px] sm:text-xs">
+            {tool === 'select' && 'Mover: Arrastra vértices, centros o el fondo para desplazar el plano.'}
+            {tool === 'point' && 'Punto: Haz clic o toca en el plano para marcar puntos libres sin unirlos.'}
             {tool === 'segment' &&
               (segmentStartVertex === null
-                ? 'Segmento: Haz clic en el primer punto para iniciar la línea recta.'
-                : `Segmento: Haz clic en el segundo punto para unirlo con ${vertices[segmentStartVertex]?.label || 'el punto inicial'} (no cerrará a triángulo).`)}
-            {tool === 'polygon' && 'Polígono: Haz clic en cada vértice y vuelve a hacer clic en el primer punto para cerrar la figura.'}
-            {tool === 'pivot' && 'Pivote: Haz clic en el plano para fijar el nuevo centro de giro u homotecia.'}
+                ? 'Segmento: Toca el primer punto para iniciar la línea recta.'
+                : `Segmento: Toca el segundo punto para unirlo con ${vertices[segmentStartVertex]?.label || 'el punto inicial'}.`)}
+            {tool === 'polygon' && 'Polígono: Toca cada vértice y vuelve a tocar el primero para cerrar la figura.'}
+            {tool === 'pivot' && 'Pivote: Toca en el plano para fijar el nuevo centro de giro u homotecia.'}
           </span>
         </div>
 
         {/* Indicador de estado de la figura en la pizarra */}
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-1.5 text-xs shrink-0">
           <span className="font-mono text-ink-soft hidden sm:inline">
             {vertices.length} {vertices.length === 1 ? 'punto' : 'puntos'}
           </span>
           {isPolygon ? (
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
               Polígono Cerrado
             </span>
           ) : segments.length > 0 ? (
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
-              {segments.length} {segments.length === 1 ? 'segmento' : 'segmentos abiertos'}
+            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+              {segments.length} {segments.length === 1 ? 'seg.' : 'seg.'}
             </span>
           ) : vertices.length > 0 ? (
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-ink-soft">
-              Puntos libres
+            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-ink-soft">
+              {vertices.length} pts
             </span>
           ) : null}
         </div>
@@ -1606,12 +1900,25 @@ export function Workspace({
       {/* 3. ÁREA DE TRABAJO PRINCIPAL: LIENZO Y PANEL LATERAL */}
       <div className="relative flex flex-1 min-h-0 w-full overflow-hidden">
         {/* LIENZO DE GEOMETRÍA */}
-        <div className="relative flex-1 min-h-0 w-full overflow-hidden bg-white">
+        <div 
+          ref={containerRef}
+          className="relative flex-1 min-h-0 w-full h-full overflow-hidden bg-white dark:bg-[#0b0f19]"
+        >
           <canvas
             ref={canvasRef}
+            style={{ touchAction: 'none' }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+            onWheel={(e) => {
+              e.preventDefault();
+              const zoomFactor = e.deltaY < 0 ? 1.1 : 0.909;
+              setScale((prev) => Math.min(Math.max(prev * zoomFactor, 12), 140));
+            }}
             onContextMenu={handleContextMenu}
             onMouseLeave={() => {
               isDraggingCanvasRef.current = false;
@@ -1619,7 +1926,7 @@ export function Workspace({
               isDraggingPivotRef.current = false;
               setMouseCoord(null);
             }}
-            className={`h-full w-full block ${
+            className={`h-full w-full block touch-none ${
               tool === 'point' || tool === 'polygon' || tool === 'pivot'
                 ? 'cursor-crosshair'
                 : isHoveringPivot || isDraggingPivotRef.current || isHoveringReflectionLine || isDraggingReflectionLineRef.current
@@ -1698,32 +2005,32 @@ export function Workspace({
 
           {/* HUD FLOTANTE DE COORDENADAS */}
           {mouseCoord && (
-            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 rounded-xl bg-surface/90 px-3 py-1 shadow-sm backdrop-blur border border-border font-mono text-xs text-ink">
+            <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 flex items-center gap-1.5 rounded-xl bg-surface/90 px-2.5 py-1 shadow-sm backdrop-blur border border-border font-mono text-[11px] sm:text-xs text-ink pointer-events-none">
               <Target className="h-3.5 w-3.5 text-accent" />
               <span>({mouseCoord.x}, {mouseCoord.y})</span>
             </div>
           )}
 
           {/* BOTONERA FLOTANTE INFERIOR DERECHA (ZOOM, CENTRAR, EXPORTAR) */}
-          <div className="absolute bottom-5 right-5 z-20 flex items-center gap-1 bg-surface/90 p-1.5 rounded-2xl shadow-lg border border-border backdrop-blur-md">
+          <div className="absolute bottom-4 right-4 sm:bottom-5 sm:right-5 z-20 flex items-center gap-1 bg-surface/90 p-1 sm:p-1.5 rounded-2xl shadow-lg border border-border backdrop-blur-md">
             <button
               onClick={() => setScale((prev) => Math.min(prev * 1.2, 140))}
               title="Acercar (Zoom +)"
-              className="p-2 rounded-xl hover:bg-black/5 text-ink transition"
+              className="p-1.5 sm:p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-ink transition"
             >
               <ZoomIn className="h-4 w-4" />
             </button>
             <button
               onClick={() => setScale((prev) => Math.max(prev * 0.833, 12))}
               title="Alejar (Zoom -)"
-              className="p-2 rounded-xl hover:bg-black/5 text-ink transition"
+              className="p-1.5 sm:p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-ink transition"
             >
               <ZoomOut className="h-4 w-4" />
             </button>
             <button
               onClick={() => { setPan({ x: 0, y: 0 }); setScale(38); }}
               title="Restablecer vista: centra el origen y restablece el zoom"
-              className="p-2 rounded-xl hover:bg-black/5 text-ink transition"
+              className="p-1.5 sm:p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-ink transition"
             >
               <Target className="h-4 w-4" />
             </button>
@@ -1733,45 +2040,72 @@ export function Workspace({
                 setGridStyle((prev) => (prev === 'lines' ? 'dots' : prev === 'dots' ? 'axes' : 'lines'))
               }
               title={`Estilo de cuadrícula: ${gridStyle}`}
-              className="px-2.5 py-1 text-xs font-semibold text-ink hover:bg-black/5 rounded-xl capitalize"
+              className="px-2 py-1 text-xs font-semibold text-ink hover:bg-black/5 dark:hover:bg-white/5 rounded-xl capitalize"
             >
               {gridStyle}
             </button>
           </div>
+
+          {/* BOTÓN FLOTANTE PARA ABRIR PANEL CUANDO ESTÁ OCULTO */}
+          {!isSidebarOpen && (
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              title="Abrir panel de configuración"
+              className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-surface/90 border border-border shadow-lg backdrop-blur-md text-xs font-bold text-ink hover:text-accent hover:border-accent transition group animate-in fade-in cursor-pointer"
+            >
+              <PanelRightOpen className="h-4 w-4 text-accent group-hover:scale-110 transition shrink-0" />
+              <span>Configuración</span>
+            </button>
+          )}
         </div>
 
-        {/* BOTÓN FLOTANTE PARA REABRIR PANEL CUANDO ESTÁ OCULTO */}
-        {/* BOTÓN FLOTANTE PARA REABRIR PANEL CUANDO ESTÁ OCULTO */}
-        {!isSidebarOpen && (
-          <button
-            onClick={() => setIsSidebarOpen(true)}
-            title="Mostrar panel lateral"
-            className="absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-2 rounded-2xl bg-surface/90 border border-border shadow-xl backdrop-blur-md text-xs font-bold text-ink hover:text-accent hover:border-accent transition group animate-in fade-in"
-          >
-            <PanelRightOpen className="h-4 w-4 text-accent group-hover:scale-110 transition" />
-            <span>
-              Abrir Panel ({sidebarTab === 'algebra' ? 'Algebra' : sidebarTab === 'notebook' ? 'Cuaderno' : 'Problemas'})
-            </span>
-          </button>
+        {/* BACKDROP PARA MÓVIL Y TABLETA */}
+        {isSidebarOpen && (
+          <div
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+            aria-hidden="true"
+          />
         )}
 
-        {/* PANEL LATERAL RESPONSIVO (VISTA ÁLGEBRA / CUADERNO / PROBLEMAS) */}
+        {/* PANEL LATERAL RESPONSIVO (DRAWER EN MÓVIL/TABLETA, ASIDE LATERAL EN DESKTOP) */}
         {isSidebarOpen && (
-          <aside className="w-[380px] min-h-0 flex flex-col bg-surface border-l border-border shadow-2xl z-30 animate-in slide-in-from-right duration-150">
-            {/* Cabecera del panel con botón para ocultar */}
-            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border bg-panel/70">
-              <span className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
-                {sidebarTab === 'algebra' && 'Vista Algebra'}
-                {sidebarTab === 'notebook' && 'Cuaderno Analitico'}
-                {sidebarTab === 'problem' && 'Problemas Inversos'}
-              </span>
+          <aside className="fixed lg:relative inset-y-0 right-0 z-50 w-[88vw] max-w-[360px] sm:w-[380px] lg:w-[380px] min-h-0 flex flex-col bg-surface border-l border-border shadow-2xl lg:shadow-none animate-in slide-in-from-right duration-200">
+            {/* Cabecera del panel con pestañas internas y botón para cerrar */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-panel/70 shrink-0">
+              <div className="flex items-center gap-1 bg-surface p-0.5 rounded-xl border border-border">
+                <button
+                  onClick={() => setSidebarTab('algebra')}
+                  className={`px-2 py-1 text-xs font-bold rounded-lg transition ${
+                    sidebarTab === 'algebra' ? 'bg-panel text-accent shadow-xs' : 'text-ink-soft hover:text-ink'
+                  }`}
+                >
+                  Álgebra
+                </button>
+                <button
+                  onClick={() => setSidebarTab('notebook')}
+                  className={`px-2 py-1 text-xs font-bold rounded-lg transition ${
+                    sidebarTab === 'notebook' ? 'bg-panel text-accent shadow-xs' : 'text-ink-soft hover:text-ink'
+                  }`}
+                >
+                  Cuaderno
+                </button>
+                <button
+                  onClick={() => setSidebarTab('problem')}
+                  className={`px-2 py-1 text-xs font-bold rounded-lg transition ${
+                    sidebarTab === 'problem' ? 'bg-panel text-emerald-700 dark:text-emerald-400 shadow-xs' : 'text-ink-soft hover:text-ink'
+                  }`}
+                >
+                  Problemas
+                </button>
+              </div>
               <button
                 onClick={() => setIsSidebarOpen(false)}
-                title="Ocultar barra lateral"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-ink-soft hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 transition"
+                title="Cerrar panel de configuración"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 transition"
               >
-                <span>Ocultar</span>
-                <PanelRightClose className="h-3.5 w-3.5" />
+                <span>Cerrar</span>
+                <X className="h-4 w-4" />
               </button>
             </div>
 
@@ -1975,6 +2309,31 @@ export function Workspace({
           onClose={() => setIsTheoryOpen(false)}
         />
       )}
+
+      {/* NOTIFICACIÓN TOAST FLOTANTE AL CARGAR O GUARDAR PROYECTO */}
+      {projectToast && (
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl shadow-2xl border text-xs font-bold animate-in fade-in slide-in-from-bottom-4 duration-200 ${
+            projectToast.type === 'success'
+              ? 'bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 border-border/40 backdrop-blur-md'
+              : 'bg-rose-600 text-white border-rose-500 shadow-rose-900/20'
+          }`}
+        >
+          {projectToast.type === 'success' ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400 dark:text-emerald-600" />
+          ) : (
+            <Info className="h-4 w-4 shrink-0 text-white" />
+          )}
+          <span className="max-w-xs sm:max-w-md">{projectToast.message}</span>
+          <button
+            onClick={() => setProjectToast(null)}
+            className="ml-2 hover:opacity-75 p-0.5"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+

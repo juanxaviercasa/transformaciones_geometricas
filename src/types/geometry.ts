@@ -167,3 +167,20 @@ export interface ClassroomToggles {
   showAlgebraicNotebook: boolean;
   cleanBoardMode: boolean;
 }
+
+export interface GeoProjectData {
+  appName: string;
+  version: string;
+  timestamp: number;
+  title?: string;
+  vertices: Point[];
+  segments: [number, number][];
+  isPolygon: boolean;
+  config: TransformationConfig;
+  gridStyle?: GridStyle;
+  scale?: number;
+  pan?: { x: number; y: number };
+  customStatement?: string;
+  problemMode?: ProblemMode;
+}
+

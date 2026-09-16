@@ -80,14 +80,14 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-screen bg-surface text-ink overflow-hidden">
       {/* Chrome-like Tab Bar */}
-      <div className="flex items-center justify-between px-2 pt-2 pb-0 bg-panel border-b border-border shadow-sm z-50 relative">
+      <div className="flex items-center justify-between px-2 pt-1.5 pb-0 bg-panel border-b border-border shadow-sm z-50 relative">
         <div className="flex items-center flex-1 overflow-hidden">
           <div className="flex items-end gap-1 overflow-x-auto overflow-y-hidden no-scrollbar">
             {tabs.map((tab) => (
               <div
                 key={tab.id}
                 onClick={() => setActiveTabId(tab.id)}
-                className={`group flex items-center gap-2 px-3 h-10 min-w-[140px] max-w-[200px] border border-b-0 rounded-t-xl cursor-pointer transition-colors relative ${
+                className={`group flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-8 sm:h-9 min-w-[110px] sm:min-w-[140px] max-w-[180px] sm:max-w-[200px] border border-b-0 rounded-t-xl cursor-pointer transition-colors relative ${
                   activeTabId === tab.id
                     ? 'bg-surface border-border text-accent font-bold z-10'
                     : 'bg-panel border-transparent text-ink-soft hover:bg-black/5 dark:hover:bg-white/5 z-0'

@@ -1,5 +1,8 @@
 node_modules/
 dist/
 *.local
+.env
+.env.local
+.deploy_report.json
 .DS_Store
 Thumbs.db
