@@ -376,8 +376,50 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
       </div>
 
       {/* 2. SECCIÓN: ELEMENTO RECTOR / PARÁMETROS DE LA TRANSFORMACIÓN */}
-      <div className="space-y-2 pt-2 border-t border-border">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+      <div className="space-y-3 pt-2 border-t border-border">
+        {/* Selector de Transformación Activa */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+              Tipo de Transformación
+            </span>
+            <span className="text-[10px] text-accent font-semibold">
+              {config.type === 'reflection' ? 'Simetría Axial' :
+               config.type === 'translation' ? 'Traslación' :
+               config.type === 'rotation' ? 'Rotación' :
+               config.type === 'central_reflection' ? 'Simetría Central' : 'Homotecia'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            {[
+              { id: 'reflection', label: 'Simetría Axial', icon: FlipHorizontal },
+              { id: 'translation', label: 'Traslación', icon: Move },
+              { id: 'rotation', label: 'Rotación', icon: RotateCw },
+              { id: 'central_reflection', label: 'Simetría Central', icon: Target },
+              { id: 'homothety', label: 'Homotecia', icon: Maximize2 }
+            ].map((opt) => {
+              const Icon = opt.icon;
+              const isSelected = config.type === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => onUpdateConfig(prev => ({ ...prev, type: opt.id as any }))}
+                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-xs font-semibold border transition text-left ${
+                    isSelected
+                      ? 'bg-accent text-white border-accent shadow-xs'
+                      : 'bg-panel border-border text-ink hover:border-accent/40'
+                  }`}
+                >
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-accent'}`} />
+                  <span className="truncate">{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint block pt-1">
           {config.type === 'rotation' && 'Parámetros de Rotación'}
           {config.type === 'reflection' && 'Parámetros de Simetría Axial'}
           {config.type === 'translation' && 'Parámetros de Traslación'}

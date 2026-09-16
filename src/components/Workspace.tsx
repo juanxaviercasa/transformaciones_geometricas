@@ -2071,9 +2071,9 @@ export function Workspace({
         {/* PANEL LATERAL RESPONSIVO (DRAWER EN MÓVIL/TABLETA, ASIDE LATERAL EN DESKTOP) */}
         {isSidebarOpen && (
           <aside className="fixed lg:relative inset-y-0 right-0 z-50 w-[88vw] max-w-[360px] sm:w-[380px] lg:w-[380px] min-h-0 flex flex-col bg-surface border-l border-border shadow-2xl lg:shadow-none animate-in slide-in-from-right duration-200">
-            {/* Cabecera del panel con pestañas internas y botón para cerrar */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-panel/70 shrink-0">
-              <div className="flex items-center gap-1 bg-surface p-0.5 rounded-xl border border-border">
+            {/* Cabecera del panel con pestañas internas y botones Guardar / Cerrar */}
+            <div className="flex items-center justify-between px-2.5 py-2 border-b border-border bg-panel/80 shrink-0 gap-2">
+              <div className="flex items-center gap-0.5 bg-surface p-0.5 rounded-xl border border-border shrink-0">
                 <button
                   onClick={() => setSidebarTab('algebra')}
                   className={`px-2 py-1 text-xs font-bold rounded-lg transition ${
@@ -2099,14 +2099,27 @@ export function Workspace({
                   Problemas
                 </button>
               </div>
-              <button
-                onClick={() => setIsSidebarOpen(false)}
-                title="Cerrar panel de configuración"
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 transition"
-              >
-                <span>Cerrar</span>
-                <X className="h-4 w-4" />
-              </button>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => {
+                    setIsSidebarOpen(false);
+                    showToast('Configuración guardada y aplicada al plano', 'success');
+                  }}
+                  title="Guardar y volver al plano cartesiano"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent/90 shadow-sm transition active:scale-95 cursor-pointer"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Guardar</span>
+                </button>
+                <button
+                  onClick={() => setIsSidebarOpen(false)}
+                  title="Cerrar panel"
+                  className="p-1.5 rounded-xl text-ink-soft hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
@@ -2143,7 +2156,26 @@ export function Workspace({
                   currentScenario={currentScenario}
                 />
               )}
+            </div>
 
+            {/* BARRA INFERIOR DE ACCIÓN (STICKY): GUARDAR Y VER PLANO */}
+            <div className="p-3 border-t border-border bg-surface/95 backdrop-blur-sm shrink-0 flex items-center gap-2 shadow-lg">
+              <button
+                onClick={() => {
+                  setIsSidebarOpen(false);
+                  showToast('Configuración guardada y aplicada al plano', 'success');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl bg-accent text-white font-bold text-xs shadow-md hover:bg-accent/90 active:scale-[0.99] transition cursor-pointer"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Guardar y Ver Plano</span>
+              </button>
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                className="px-3 py-2.5 rounded-2xl border border-border text-ink-soft hover:text-ink hover:bg-panel font-semibold text-xs transition"
+              >
+                Cerrar
+              </button>
             </div>
           </aside>
         )}
