@@ -68,7 +68,7 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-surface text-ink text-xs font-sans overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 bg-surface text-ink text-xs font-sans overflow-hidden">
       {/* CABECERA DEL CUADERNO */}
       <div className="flex items-center justify-between p-3.5 border-b border-border bg-panel">
         <div className="flex items-center gap-2">
@@ -92,7 +92,7 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
       </div>
 
       {/* CONTENIDO DESPLAZABLE */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4">
         {/* 1. FÓRMULA GENERAL */}
         <div className="p-3 rounded-2xl bg-accent/5 border border-accent/20 space-y-1.5">
           <div className="flex items-center justify-between">

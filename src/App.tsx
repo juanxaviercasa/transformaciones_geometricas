@@ -165,7 +165,7 @@ export default function App() {
       </div>
 
       {/* Render all workspaces but only show active */}
-      <div className="flex-1 relative bg-paper z-0">
+      <div className="flex-1 min-h-0 relative overflow-hidden bg-paper z-0">
         {tabs.map((tab) => (
           <Workspace 
             key={tab.id} 

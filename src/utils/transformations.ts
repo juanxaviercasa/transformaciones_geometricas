@@ -38,6 +38,11 @@ export function transformPoint(p: Point, config: TransformationConfig): Point {
         const k = config.customAxisValue ?? 0;
         rx = x;
         ry = 2 * k - y;
+      } else if (config.reflectionAxis === 'general') {
+        const { a, b, c } = config.generalLine;
+        const factor = (2 * (a * x + b * y + c)) / (a * a + b * b || 1);
+        rx = x - a * factor;
+        ry = y - b * factor;
       }
       return {
         x: Number(rx.toFixed(3)),

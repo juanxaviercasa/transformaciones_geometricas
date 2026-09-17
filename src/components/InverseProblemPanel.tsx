@@ -59,7 +59,7 @@ export const InverseProblemPanel: React.FC<InverseProblemPanelProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-surface text-ink text-xs font-sans p-4 space-y-4 overflow-y-auto">
+    <div className="flex flex-col h-full min-h-0 bg-surface text-ink text-xs font-sans p-4 space-y-4 overflow-y-auto overscroll-contain">
       {/* ENCABEZADO DE MODO INVERSO */}
       <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-1">
         <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">

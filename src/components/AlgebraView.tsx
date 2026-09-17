@@ -67,6 +67,38 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
   showLabels,
   onToggleLabels
 }) => {
+  const generalLineAngle = (Math.atan2(config.generalLine.a, -config.generalLine.b) * 180) / Math.PI;
+  const normalizedGeneralLineAngle = ((generalLineAngle % 180) + 180) % 180;
+  const generalLineOffset = -config.generalLine.c;
+
+  const updateGeneralLine = (angle: number, offset: number) => {
+    const radians = (angle * Math.PI) / 180;
+    onUpdateConfig((prev) => ({
+      ...prev,
+      generalLine: {
+        a: Number(Math.sin(radians).toFixed(6)),
+        b: Number((-Math.cos(radians)).toFixed(6)),
+        c: Number((-offset).toFixed(6))
+      }
+    }));
+  };
+
+  const activeReflectionAxes = config.reflectionAxes?.length
+    ? config.reflectionAxes
+    : [config.reflectionAxis];
+
+  const toggleReflectionAxis = (axis: ReflectionAxis) => {
+    const nextAxes = activeReflectionAxes.includes(axis)
+      ? activeReflectionAxes.filter((activeAxis) => activeAxis !== axis)
+      : [...activeReflectionAxes, axis];
+    const safeAxes = nextAxes.length > 0 ? nextAxes : [axis];
+    onUpdateConfig((prev) => ({
+      ...prev,
+      reflectionAxis: safeAxes[0],
+      reflectionAxes: safeAxes
+    }));
+  };
+
   // Cálculo de perímetro y área básica por fórmula de Gauss (Shoelace) para polígonos cerrados
   const polygonMetrics = React.useMemo(() => {
     if (!isPolygon || vertices.length < 3) return { area: 0, perimeter: 0 };
@@ -99,7 +131,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
   };
 
   return (
-    <div className="h-full bg-surface text-ink text-xs font-sans overflow-y-auto p-3.5 space-y-4">
+    <div className="h-full min-h-0 bg-surface text-ink text-xs font-sans overflow-y-auto overscroll-contain p-3.5 space-y-4">
       {/* 1. SECCIÓN: FIGURA PREIMAGEN (OBJETO ORIGINAL F) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -300,12 +332,58 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
               className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
                 toggles.showConstructionGuides ? 'bg-rose-500' : 'bg-border-strong'
               }`}
+              aria-label="Mostrar u ocultar líneas guía de construcción"
+              aria-pressed={toggles.showConstructionGuides}
             >
               <div
                 className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${
                   toggles.showConstructionGuides ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
+            </button>
+          </div>
+
+          <div className="h-px bg-border/60" />
+
+          {/* Toggle Distancias a la simetría */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
+                <Ruler className="h-3.5 w-3.5 text-rose-500" />
+                <span>Distancias a la simetría</span>
+              </div>
+              <p className="text-[10px] text-ink-soft leading-tight mt-0.5">
+                Muestra u oculta las perpendiculares y sus marcas de distancia en cada eje activo.
+              </p>
+            </div>
+            <button
+              onClick={() => onUpdateToggles((prev) => ({ ...prev, showReflectionDistances: !prev.showReflectionDistances }))}
+              className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${toggles.showReflectionDistances ? 'bg-rose-500' : 'bg-border-strong'}`}
+              aria-label="Mostrar u ocultar distancias a la simetría"
+            >
+              <div className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${toggles.showReflectionDistances ? 'translate-x-4' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          <div className="h-px bg-border/60" />
+
+          {/* Toggle Puntos */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
+                {toggles.showPoints ? <Eye className="h-3.5 w-3.5 text-accent" /> : <EyeOff className="h-3.5 w-3.5 text-ink-soft" />}
+                <span>Puntos de las figuras</span>
+              </div>
+              <p className="text-[10px] text-ink-soft leading-tight mt-0.5">
+                Muestra u oculta los vértices originales y sus simétricos.
+              </p>
+            </div>
+            <button
+              onClick={() => onUpdateToggles((prev) => ({ ...prev, showPoints: !prev.showPoints }))}
+              className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${toggles.showPoints ? 'bg-accent' : 'bg-border-strong'}`}
+              aria-label="Mostrar u ocultar puntos"
+            >
+              <div className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${toggles.showPoints ? 'translate-x-4' : 'translate-x-0'}`} />
             </button>
           </div>
 
@@ -364,6 +442,8 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
               className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
                 showLabels ? 'bg-accent' : 'bg-border-strong'
               }`}
+              aria-label="Mostrar u ocultar etiquetas y coordenadas"
+              aria-pressed={showLabels}
             >
               <div
                 className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${
@@ -484,7 +564,12 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
 
         {config.type === 'reflection' && (
           <div className="p-3 rounded-xl bg-panel border border-border space-y-2 font-sans text-xs">
-            <span className="text-ink-soft block font-medium">Eje de Reflexión L:</span>
+            <span className="text-ink-soft block font-medium">
+              Ejes de Reflexión L:
+              {activeReflectionAxes.length > 1 && (
+                <span className="ml-1 text-rose-600 font-bold">({activeReflectionAxes.length} activos)</span>
+              )}
+            </span>
             <div className="grid grid-cols-3 gap-1">
               {(
                 [
@@ -493,16 +578,15 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
                   { id: 'y=x', label: 'y = x' },
                   { id: 'y=-x', label: 'y = -x' },
                   { id: 'custom_x', label: 'x = k' },
-                  { id: 'custom_y', label: 'y = k' }
+                  { id: 'custom_y', label: 'y = k' },
+                  { id: 'general', label: 'Oblicua' }
                 ] as const
               ).map(({ id, label }) => (
                 <button
                   key={id}
-                  onClick={() =>
-                    onUpdateConfig((prev) => ({ ...prev, reflectionAxis: id as ReflectionAxis }))
-                  }
+                  onClick={() => toggleReflectionAxis(id as ReflectionAxis)}
                   className={`py-1 px-2 rounded-lg text-xs font-semibold border transition ${
-                    config.reflectionAxis === id
+                    activeReflectionAxes.includes(id as ReflectionAxis)
                       ? 'bg-rose-600 text-white border-rose-600'
                       : 'bg-surface text-ink border-border hover:border-border-strong'
                   }`}
@@ -543,6 +627,64 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
                     }}
                     className="w-14 text-center font-bold text-rose-600 bg-surface border border-rose-300 rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-rose-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                   />
+                </div>
+              </div>
+            )}
+
+            {config.reflectionAxis === 'general' && (
+              <div className="pt-2 border-t border-border space-y-2">
+                <p className="text-[10px] text-ink-soft leading-relaxed">
+                  Define una recta oblicua por su ángulo respecto al eje X y su distancia firmada al origen.
+                </p>
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="text-[10px] text-ink-soft shrink-0">Ángulo:</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="179"
+                    value={Math.round(normalizedGeneralLineAngle)}
+                    onChange={(e) => updateGeneralLine(Number(e.target.value), generalLineOffset)}
+                    className="flex-1 accent-rose-600"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="179"
+                    value={Math.round(normalizedGeneralLineAngle)}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isNaN(value)) updateGeneralLine(Math.max(0, Math.min(179, value)), generalLineOffset);
+                    }}
+                    className="w-16 text-center font-bold text-rose-600 bg-surface border border-rose-300 rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-rose-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="text-rose-600">°</span>
+                </div>
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="text-[10px] text-ink-soft shrink-0">Desplazamiento:</span>
+                  <input
+                    type="range"
+                    min="-20"
+                    max="20"
+                    step="0.5"
+                    value={generalLineOffset}
+                    onChange={(e) => updateGeneralLine(normalizedGeneralLineAngle, Number(e.target.value))}
+                    className="flex-1 accent-rose-600"
+                  />
+                  <input
+                    type="number"
+                    min="-20"
+                    max="20"
+                    step="0.5"
+                    value={generalLineOffset}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isNaN(value)) updateGeneralLine(normalizedGeneralLineAngle, Math.max(-20, Math.min(20, value)));
+                    }}
+                    className="w-16 text-center font-bold text-rose-600 bg-surface border border-rose-300 rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-rose-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                <div className="px-2 py-1.5 rounded-lg bg-surface border border-border text-[10px] font-mono text-ink-soft">
+                  {formatNum(config.generalLine.a)}x {config.generalLine.b >= 0 ? '+' : '-'} {formatNum(Math.abs(config.generalLine.b))}y {config.generalLine.c >= 0 ? '+' : '-'} {formatNum(Math.abs(config.generalLine.c))} = 0
                 </div>
               </div>
             )}

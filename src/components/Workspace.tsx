@@ -98,6 +98,7 @@ export function Workspace({
     dx: 4,
     dy: 2,
     reflectionAxis: 'custom_x',
+    reflectionAxes: ['custom_x'],
     customAxisValue: 2,
     generalLine: { a: 1, b: 0, c: -2 },
     centralCenter: { x: 0, y: 0 },
@@ -134,12 +135,15 @@ export function Workspace({
     return false;
   });
   const [isTheoryOpen, setIsTheoryOpen] = useState<boolean>(false);
+  const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
 
   // 6. TOGGLES DE INSPECCIÓN
   const [toggles, setToggles] = useState<ClassroomToggles>({
     showSideLengths: false,
     showInteriorAngles: false,
     showConstructionGuides: true,
+    showReflectionDistances: true,
+    showPoints: true,
     showAlgebraicNotebook: true,
     cleanBoardMode: false
   });
@@ -173,6 +177,30 @@ export function Workspace({
   const isDraggingReflectionLineRef = useRef(false);
   const [isHoveringReflectionLine, setIsHoveringReflectionLine] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
+
+  const toggleCanvasFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
+      }
+
+      if (containerRef.current?.requestFullscreen) {
+        await containerRef.current.requestFullscreen();
+      }
+    } catch {
+      setIsCanvasFullscreen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsCanvasFullscreen(document.fullscreenElement === containerRef.current);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // OBSERVADOR DE REDIMENSIONAMIENTO PARA MÁXIMA NITIDEZ (Cero desenfoque al ocultar/mostrar panel o rotar pantalla)
   useEffect(() => {
@@ -214,10 +242,10 @@ export function Workspace({
     };
   }, [isActive, isSidebarOpen]);
 
-  // Asegurar que en móvil y tablet (< 1024px) el panel esté SIEMPRE cerrado al iniciar o cambiar de tamaño
+  // Mantener el panel cerrado solo en viewports móviles (< 768px)
   useEffect(() => {
     const handleCheckMobile = () => {
-      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
         setIsSidebarOpen(false);
       }
     };
@@ -247,6 +275,25 @@ export function Workspace({
   }, [vertices, config]);
 
   const transformedVertices = engineResult.transformedVertices;
+  const activeReflectionAxes = config.reflectionAxes?.length
+    ? config.reflectionAxes
+    : [config.reflectionAxis];
+  const additionalReflectionVertices = useMemo(() => {
+    if (config.type !== 'reflection' || activeReflectionAxes.length < 2) return [];
+    return activeReflectionAxes.slice(1).map((axis) => solveGeometryProblem(vertices, {
+      ...config,
+      reflectionAxis: axis,
+      reflectionAxes: [axis]
+    }).transformedVertices);
+  }, [activeReflectionAxes, config, vertices]);
+  const additionalReflectionGuides = useMemo(() => {
+    if (config.type !== 'reflection' || activeReflectionAxes.length < 2) return [];
+    return activeReflectionAxes.slice(1).map((axis) => solveGeometryProblem(vertices, {
+      ...config,
+      reflectionAxis: axis,
+      reflectionAxes: [axis]
+    }).constructionElements.perpendicularGuides || []);
+  }, [activeReflectionAxes, config, vertices]);
 
   // Centro pivote activo
   const activePivot = useMemo(() => {
@@ -667,6 +714,53 @@ export function Workspace({
       }
       ctx.stroke();
 
+      // Dibujar los ejes adicionales seleccionados con colores distinguibles.
+      const additionalAxisColors = ['#db2777', '#ea580c', '#0891b2', '#65a30d', '#be123c', '#0f766e'];
+      activeReflectionAxes.slice(1).forEach((axis, axisIndex) => {
+        ctx.save();
+        ctx.strokeStyle = additionalAxisColors[axisIndex % additionalAxisColors.length];
+        ctx.lineWidth = 2;
+        ctx.setLineDash([7, 5]);
+        ctx.beginPath();
+        if (axis === 'x') {
+          ctx.moveTo(0, originY);
+          ctx.lineTo(width, originY);
+        } else if (axis === 'y') {
+          ctx.moveTo(originX, 0);
+          ctx.lineTo(originX, height);
+        } else if (axis === 'y=x') {
+          ctx.moveTo(originX - 3000, originY + 3000);
+          ctx.lineTo(originX + 3000, originY - 3000);
+        } else if (axis === 'y=-x') {
+          ctx.moveTo(originX - 3000, originY - 3000);
+          ctx.lineTo(originX + 3000, originY + 3000);
+        } else if (axis === 'custom_x') {
+          const sx = originX + config.customAxisValue * scale;
+          ctx.moveTo(sx, 0);
+          ctx.lineTo(sx, height);
+        } else if (axis === 'custom_y') {
+          const sy = originY - config.customAxisValue * scale;
+          ctx.moveTo(0, sy);
+          ctx.lineTo(width, sy);
+        } else if (axis === 'general') {
+          const { a, b, c } = config.generalLine;
+          if (b !== 0) {
+            const y1 = (-a * minUnitX - c) / b;
+            const y2 = (-a * maxUnitX - c) / b;
+            const p1 = toScreen({ x: minUnitX, y: y1 }, width, height);
+            const p2 = toScreen({ x: maxUnitX, y: y2 }, width, height);
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+          } else if (a !== 0) {
+            const sx = originX + (-c / a) * scale;
+            ctx.moveTo(sx, 0);
+            ctx.lineTo(sx, height);
+          }
+        }
+        ctx.stroke();
+        ctx.restore();
+      });
+
       // Placa elegante para el eje L
       ctx.setLineDash([]);
       ctx.fillStyle = '#dc2626';
@@ -721,38 +815,71 @@ export function Workspace({
     }
 
     // 4. GUÍAS Y CONSTRUCCIONES MATEMÁTICAS ESTRICTAS
-    if (toggles.showConstructionGuides && vertices.length > 0) {
+    if ((toggles.showConstructionGuides || (config.type === 'reflection' && toggles.showReflectionDistances)) && vertices.length > 0) {
+      const reflectionGuideColors = [
+        '#dc2626', '#2563eb', '#16a34a', '#9333ea',
+        '#ea580c', '#0891b2', '#be123c', '#65a30d'
+      ];
+
       // A) Simetría Axial: Segmentos perpendiculares, 90° y ticks congruentes
-      if (config.type === 'reflection' && engineResult.constructionElements.perpendicularGuides) {
+      if (config.type === 'reflection' && toggles.showConstructionGuides && engineResult.constructionElements.perpendicularGuides) {
         ctx.save();
-        engineResult.constructionElements.perpendicularGuides.forEach((g) => {
+        engineResult.constructionElements.perpendicularGuides.forEach((g, guideIndex) => {
           const s = toScreen(g.p, width, height);
           const hScr = toScreen(g.footH, width, height);
           const e = toScreen(g.pPrime, width, height);
+          const guideColor = reflectionGuideColors[guideIndex % reflectionGuideColors.length];
+          const dx = e.x - s.x;
+          const dy = e.y - s.y;
+          const length = Math.hypot(dx, dy) || 1;
+          const laneOffset = ((guideIndex % 5) - 2) * 3;
+          const normalX = -dy / length;
+          const normalY = dx / length;
+          const laneStart = { x: s.x + normalX * laneOffset, y: s.y + normalY * laneOffset };
+          const laneEnd = { x: e.x + normalX * laneOffset, y: e.y + normalY * laneOffset };
+          const laneFoot = { x: hScr.x + normalX * laneOffset, y: hScr.y + normalY * laneOffset };
 
-          // Perpendicular discontinua fina
-          ctx.strokeStyle = '#f87171';
-          ctx.lineWidth = 1.2;
-          ctx.setLineDash([4, 4]);
+          // Conector fino: conserva visible la relación exacta con P y P'.
+          ctx.strokeStyle = `${guideColor}66`;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
           ctx.beginPath();
           ctx.moveTo(s.x, s.y);
-          ctx.lineTo(e.x, e.y);
+          ctx.lineTo(laneStart.x, laneStart.y);
+          ctx.moveTo(e.x, e.y);
+          ctx.lineTo(laneEnd.x, laneEnd.y);
+          ctx.stroke();
+
+          // Carril perpendicular coloreado y con patrón alterno.
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 4;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(laneStart.x, laneStart.y);
+          ctx.lineTo(laneEnd.x, laneEnd.y);
+          ctx.stroke();
+          ctx.strokeStyle = guideColor;
+          ctx.lineWidth = 2;
+          ctx.setLineDash(guideIndex % 2 === 0 ? [4, 4] : [7, 3]);
+          ctx.beginPath();
+          ctx.moveTo(laneStart.x, laneStart.y);
+          ctx.lineTo(laneEnd.x, laneEnd.y);
           ctx.stroke();
 
           // Símbolo de ángulo recto (90°)
-          const vP = { x: s.x - hScr.x, y: s.y - hScr.y };
+            const vP = { x: laneStart.x - laneFoot.x, y: laneStart.y - laneFoot.y };
           const lenP = Math.hypot(vP.x, vP.y);
           if (lenP > 6) {
             const uP = { x: vP.x / lenP, y: vP.y / lenP };
             const uL = { x: -uP.y, y: uP.x };
             const sq = 7;
-            ctx.strokeStyle = '#dc2626';
+            ctx.strokeStyle = guideColor;
             ctx.lineWidth = 1.2;
             ctx.setLineDash([]);
             ctx.beginPath();
-            ctx.moveTo(hScr.x + uP.x * sq, hScr.y + uP.y * sq);
-            ctx.lineTo(hScr.x + uP.x * sq + uL.x * sq, hScr.y + uP.y * sq + uL.y * sq);
-            ctx.lineTo(hScr.x + uL.x * sq, hScr.y + uL.y * sq);
+            ctx.moveTo(laneFoot.x + uP.x * sq, laneFoot.y + uP.y * sq);
+            ctx.lineTo(laneFoot.x + uP.x * sq + uL.x * sq, laneFoot.y + uP.y * sq + uL.y * sq);
+            ctx.lineTo(laneFoot.x + uL.x * sq, laneFoot.y + uL.y * sq);
             ctx.stroke();
 
             // Ticks de congruencia //
@@ -763,11 +890,116 @@ export function Workspace({
               ctx.lineTo(mid.x + uL.x * tLen, mid.y + uL.y * tLen);
               ctx.stroke();
             };
-            drawTicks({ x: (s.x + hScr.x) / 2, y: (s.y + hScr.y) / 2 });
-            drawTicks({ x: (hScr.x + e.x) / 2, y: (hScr.y + e.y) / 2 });
+            drawTicks({ x: (laneStart.x + laneFoot.x) / 2, y: (laneStart.y + laneFoot.y) / 2 });
+            drawTicks({ x: (laneFoot.x + laneEnd.x) / 2, y: (laneFoot.y + laneEnd.y) / 2 });
           }
         });
         ctx.restore();
+      }
+
+      if (config.type === 'reflection' && toggles.showConstructionGuides && additionalReflectionGuides.length > 0) {
+        additionalReflectionGuides.forEach((guides, guideIndex) => {
+          ctx.save();
+          ctx.setLineDash([4, 4]);
+          guides.forEach((guide, pointIndex) => {
+            const guideColor = reflectionGuideColors[(guideIndex * 3 + pointIndex + 1) % reflectionGuideColors.length];
+            ctx.strokeStyle = guideColor;
+            ctx.lineWidth = 1.6;
+            const start = toScreen(guide.p, width, height);
+            const end = toScreen(guide.pPrime, width, height);
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const length = Math.hypot(dx, dy) || 1;
+            const laneOffset = ((pointIndex % 5) - 2) * 3;
+            const normalX = -dy / length;
+            const normalY = dx / length;
+            const laneStart = { x: start.x + normalX * laneOffset, y: start.y + normalY * laneOffset };
+            const laneEnd = { x: end.x + normalX * laneOffset, y: end.y + normalY * laneOffset };
+            ctx.setLineDash([]);
+            ctx.strokeStyle = `${guideColor}66`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(laneStart.x, laneStart.y);
+            ctx.moveTo(end.x, end.y);
+            ctx.lineTo(laneEnd.x, laneEnd.y);
+            ctx.stroke();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(laneStart.x, laneStart.y);
+            ctx.lineTo(laneEnd.x, laneEnd.y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.strokeStyle = guideColor;
+            ctx.lineWidth = 2;
+            ctx.setLineDash(pointIndex % 2 === 0 ? [4, 4] : [7, 3]);
+            ctx.moveTo(laneStart.x, laneStart.y);
+            ctx.lineTo(laneEnd.x, laneEnd.y);
+            ctx.stroke();
+
+            if (length > 6) {
+              const midpointX = (laneStart.x + laneEnd.x) / 2;
+              const midpointY = (laneStart.y + laneEnd.y) / 2;
+              ctx.setLineDash([]);
+              ctx.beginPath();
+              ctx.moveTo(midpointX - normalX * 3.5, midpointY - normalY * 3.5);
+              ctx.lineTo(midpointX + normalX * 3.5, midpointY + normalY * 3.5);
+              ctx.strokeStyle = guideColor;
+              ctx.stroke();
+            }
+          });
+          ctx.restore();
+        });
+      }
+
+      // Las distancias numéricas son independientes de las líneas de construcción.
+      if (false && config.type === 'reflection' && toggles.showReflectionDistances) {
+        const drawReflectionDistance = (guide: { p: Point; pPrime: Point; footH: Point }, color: string, guideIndex: number) => {
+          const start = toScreen(guide.p, width, height);
+          const foot = toScreen(guide.footH, width, height);
+          const end = toScreen(guide.pPrime, width, height);
+          const dx = end.x - start.x;
+          const dy = end.y - start.y;
+          const length = Math.hypot(dx, dy) || 1;
+          const normalX = -dy / length;
+          const normalY = dx / length;
+          const laneOffset = ((guideIndex % 5) - 2) * 3;
+          const labelOffset = 10 + (guideIndex % 3) * 8;
+          const drawHalfLabel = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+            const midX = (a.x + b.x) / 2 + normalX * (laneOffset + labelOffset);
+            const midY = (a.y + b.y) / 2 + normalY * (laneOffset + labelOffset);
+            const value = formatNum(distance(guide.p, guide.footH));
+            ctx.save();
+            ctx.font = 'bold 11px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const textWidth = ctx.measureText(value).width;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.2;
+            ctx.fillRect(midX - textWidth / 2 - 3, midY - 8, textWidth + 6, 16);
+            ctx.strokeRect(midX - textWidth / 2 - 3, midY - 8, textWidth + 6, 16);
+            ctx.fillStyle = color;
+            ctx.fillText(value, midX, midY);
+            ctx.restore();
+          };
+
+          // El mismo valor en PH y HP': hace visible la igualdad propia de la simetría axial.
+          drawHalfLabel(start, foot);
+          drawHalfLabel(foot, end);
+        };
+
+        engineResult.constructionElements.perpendicularGuides?.forEach((guide, guideIndex) => {
+          drawReflectionDistance(guide, reflectionGuideColors[guideIndex % reflectionGuideColors.length], guideIndex);
+        });
+        additionalReflectionGuides.forEach((guides, guideIndex) => {
+          guides.forEach((guide, pointIndex) => {
+            const color = reflectionGuideColors[(guideIndex * 3 + pointIndex + 1) % reflectionGuideColors.length];
+            drawReflectionDistance(guide, color, pointIndex);
+          });
+        });
       }
 
       // B) Traslación: Descomposición en catetos Δx, Δy y vector resultante
@@ -1039,6 +1271,145 @@ export function Workspace({
     const preFill = isDarkMode ? 'rgba(56, 189, 248, 0.2)' : 'rgba(21, 101, 192, 0.14)';
     const transStroke = isDarkMode ? '#c084fc' : '#7b1fa2';
     const transFill = isDarkMode ? 'rgba(192, 132, 252, 0.2)' : 'rgba(123, 31, 162, 0.12)';
+    const additionalReflectionColors = [
+      { stroke: '#db2777', fill: 'rgba(219, 39, 119, 0.12)' },
+      { stroke: '#ea580c', fill: 'rgba(234, 88, 12, 0.12)' },
+      { stroke: '#0891b2', fill: 'rgba(8, 145, 178, 0.12)' },
+      { stroke: '#65a30d', fill: 'rgba(101, 163, 13, 0.12)' },
+      { stroke: '#be123c', fill: 'rgba(190, 18, 60, 0.12)' },
+      { stroke: '#0f766e', fill: 'rgba(15, 118, 110, 0.12)' }
+    ];
+    const labelBoxes: Array<{ left: number; top: number; right: number; bottom: number }> = [];
+    const pointObstacles = [
+      ...vertices,
+      ...transformedVertices,
+      ...additionalReflectionVertices.flat()
+    ].map((point) => toScreen(point, width, height));
+    const getLabelPosition = (point: { x: number; y: number }, textWidth: number) => {
+      const candidates = [
+        { x: point.x + 8, y: point.y - 8, align: 'left' as CanvasTextAlign },
+        { x: point.x + 8, y: point.y + 16, align: 'left' as CanvasTextAlign },
+        { x: point.x - 8, y: point.y - 8, align: 'right' as CanvasTextAlign },
+        { x: point.x - 8, y: point.y + 16, align: 'right' as CanvasTextAlign },
+        { x: point.x, y: point.y - 16, align: 'center' as CanvasTextAlign }
+      ];
+      const margin = 3;
+      for (const candidate of candidates) {
+        const left = candidate.align === 'right' ? candidate.x - textWidth : candidate.align === 'center' ? candidate.x - textWidth / 2 : candidate.x;
+        const box = { left, top: candidate.y - 8, right: left + textWidth, bottom: candidate.y + 8 };
+        const overlapsPoint = pointObstacles.some((obstacle) =>
+          obstacle !== point && obstacle.x + pRad + margin > box.left && obstacle.x - pRad - margin < box.right && obstacle.y + pRad + margin > box.top && obstacle.y - pRad - margin < box.bottom
+        );
+        const overlapsLabel = labelBoxes.some((other) => other.left < box.right && other.right > box.left && other.top < box.bottom && other.bottom > box.top);
+        if (!overlapsPoint && !overlapsLabel && box.left >= 4 && box.right <= width - 4 && box.top >= 4 && box.bottom <= height - 4) {
+          labelBoxes.push(box);
+          return candidate;
+        }
+      }
+      const fallback = candidates[0];
+      labelBoxes.push({ left: fallback.x, top: fallback.y - 8, right: fallback.x + textWidth, bottom: fallback.y + 8 });
+      return fallback;
+    };
+    const drawSideMeasurement = (pA: Point, pB: Point, color: string) => {
+      const start = toScreen(pA, width, height);
+      const end = toScreen(pB, width, height);
+      const midX = (start.x + end.x) / 2;
+      const midY = (start.y + end.y) / 2;
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 1) return;
+
+      const normalX = -dy / length;
+      const normalY = dx / length;
+      const text = formatNum(distance(pA, pB));
+      ctx.save();
+      ctx.font = 'bold 12px "JetBrains Mono", monospace';
+      const textWidth = ctx.measureText(text).width;
+      const labelX = midX + normalX * 12;
+      const labelY = midY + normalY * 12;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+      ctx.strokeStyle = `${color}55`;
+      ctx.lineWidth = 1;
+      if (ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(labelX - textWidth / 2 - 4, labelY - 8, textWidth + 8, 16, 4);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(labelX - textWidth / 2 - 4, labelY - 8, textWidth + 8, 16);
+      }
+      ctx.fillStyle = color;
+      ctx.fillText(text, labelX, labelY);
+      ctx.restore();
+    };
+
+    // Las reflexiones adicionales se dibujan antes de la imagen principal para conservar su lectura visual.
+    if (additionalReflectionVertices.length > 0) {
+      additionalReflectionVertices.forEach((image, imageIndex) => {
+        const colors = additionalReflectionColors[imageIndex % additionalReflectionColors.length];
+        ctx.save();
+        ctx.strokeStyle = colors.stroke;
+        ctx.fillStyle = colors.fill;
+        ctx.lineWidth = baseLW + 0.2;
+        ctx.setLineDash([]);
+
+        if (isPolygon && image.length >= 3) {
+          ctx.beginPath();
+          const first = toScreen(image[0], width, height);
+          ctx.moveTo(first.x, first.y);
+          image.slice(1).forEach((point) => {
+            const screenPoint = toScreen(point, width, height);
+            ctx.lineTo(screenPoint.x, screenPoint.y);
+          });
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          if (toggles.showSideLengths) {
+            for (let i = 0; i < image.length; i++) {
+              drawSideMeasurement(image[i], image[(i + 1) % image.length], colors.stroke);
+            }
+          }
+        } else {
+          segments.forEach(([a, b]) => {
+            if (!image[a] || !image[b]) return;
+            const start = toScreen(image[a], width, height);
+            const end = toScreen(image[b], width, height);
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+            if (toggles.showSideLengths) drawSideMeasurement(image[a], image[b], colors.stroke);
+          });
+        }
+
+        if (toggles.showPoints) image.forEach((point, pointIndex) => {
+          const screenPoint = toScreen(point, width, height);
+          ctx.beginPath();
+          ctx.arc(screenPoint.x, screenPoint.y, pRad - 0.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = baseLW - 0.2;
+          ctx.stroke();
+          if (showLabels) {
+            const cleanName = (point.label || String.fromCharCode(65 + pointIndex)).replace(/'/g, '');
+            const labelText = `${cleanName}' (${formatNum(point.x)}, ${formatNum(point.y)})`;
+            ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
+            const labelPosition = getLabelPosition(screenPoint, ctx.measureText(labelText).width);
+            ctx.textAlign = labelPosition.align;
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = isDarkMode ? '#0b0f19' : 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 3;
+            ctx.strokeText(labelText, labelPosition.x, labelPosition.y);
+            ctx.fillStyle = colors.stroke;
+            ctx.fillText(labelText, labelPosition.x, labelPosition.y);
+          }
+        });
+        ctx.restore();
+      });
+    }
 
     // A) CASO 1: POLÍGONO CERRADO (isPolygon && vertices.length >= 3)
     if (isPolygon && vertices.length >= 3) {
@@ -1070,11 +1441,7 @@ export function Workspace({
             const pB = transformedVertices[(i + 1) % transformedVertices.length];
             const sA = toScreen(pA, width, height);
             const sB = toScreen(pB, width, height);
-            ctx.fillText(
-              `${formatNum(distance(pA, pB))}`,
-              (sA.x + sB.x) / 2,
-              (sA.y + sB.y) / 2 - 6
-            );
+            drawSideMeasurement(pA, pB, transStroke);
           }
         }
       }
@@ -1106,11 +1473,7 @@ export function Workspace({
           const pB = vertices[(i + 1) % vertices.length];
           const sA = toScreen(pA, width, height);
           const sB = toScreen(pB, width, height);
-          ctx.fillText(
-            `${formatNum(distance(pA, pB))}`,
-            (sA.x + sB.x) / 2,
-            (sA.y + sB.y) / 2 - 6
-          );
+          drawSideMeasurement(pA, pB, preStroke);
         }
       }
     } else {
@@ -1134,11 +1497,7 @@ export function Workspace({
             ctx.font = 'bold 12px "JetBrains Mono", monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(
-              `${formatNum(distance(transformedVertices[a], transformedVertices[b]))}`,
-              (sA.x + sB.x) / 2,
-              (sA.y + sB.y) / 2 - 6
-            );
+            drawSideMeasurement(transformedVertices[a], transformedVertices[b], transStroke);
           }
         }
 
@@ -1159,11 +1518,7 @@ export function Workspace({
             ctx.font = 'bold 12px "JetBrains Mono", monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(
-              `${formatNum(distance(vertices[a], vertices[b]))}`,
-              (sA.x + sB.x) / 2,
-              (sA.y + sB.y) / 2 - 6
-            );
+            drawSideMeasurement(vertices[a], vertices[b], preStroke);
           }
         }
       });
@@ -1190,7 +1545,7 @@ export function Workspace({
 
     // C) DIBUJAR VÉRTICES (Puntos y sus etiquetas anti-colisión)
     // 1. Vértices de F' (Transformada)
-    transformedVertices.forEach((pt, i) => {
+    if (toggles.showPoints) transformedVertices.forEach((pt, i) => {
       const pScr = toScreen(pt, width, height);
       ctx.beginPath();
       ctx.arc(pScr.x, pScr.y, pRad - 0.5, 0, Math.PI * 2);
@@ -1205,24 +1560,19 @@ export function Workspace({
         const labelText = `${cleanName}' (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
         ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
         const textWidth = ctx.measureText(labelText).width;
-        let align: CanvasTextAlign = 'left';
-        let lx = pScr.x + 8;
-        if (lx + textWidth > width - 10) {
-          align = 'right';
-          lx = pScr.x - 8;
-        }
-        ctx.textAlign = align;
+        const labelPosition = getLabelPosition(pScr, textWidth);
+        ctx.textAlign = labelPosition.align;
         ctx.textBaseline = 'middle';
         ctx.strokeStyle = isDarkMode ? '#0b0f19' : 'rgba(255, 255, 255, 0.9)';
         ctx.lineWidth = 3;
-        ctx.strokeText(labelText, lx, pScr.y - 8);
+        ctx.strokeText(labelText, labelPosition.x, labelPosition.y);
         ctx.fillStyle = isDarkMode ? '#e9d5ff' : '#581c87';
-        ctx.fillText(labelText, lx, pScr.y - 8);
+        ctx.fillText(labelText, labelPosition.x, labelPosition.y);
       }
     });
 
     // 2. Vértices de F (Original)
-    vertices.forEach((pt, i) => {
+    if (toggles.showPoints) vertices.forEach((pt, i) => {
       const pScr = toScreen(pt, width, height);
       const isHovered = hoveredVertexIndex === i;
       const isSegmentSelected = tool === 'segment' && segmentStartVertex === i;
@@ -1249,21 +1599,105 @@ export function Workspace({
         const labelText = `${cleanName} (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
         ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
         const textWidth = ctx.measureText(labelText).width;
-        let align: CanvasTextAlign = 'left';
-        let lx = pScr.x + 8;
-        if (lx + textWidth > width - 10) {
-          align = 'right';
-          lx = pScr.x - 8;
-        }
-        ctx.textAlign = align;
+        const labelPosition = getLabelPosition(pScr, textWidth);
+        ctx.textAlign = labelPosition.align;
         ctx.textBaseline = 'middle';
         ctx.strokeStyle = isDarkMode ? '#0b0f19' : 'rgba(255, 255, 255, 0.9)';
         ctx.lineWidth = 3;
-        ctx.strokeText(labelText, lx, pScr.y - 8);
+        ctx.strokeText(labelText, labelPosition.x, labelPosition.y);
         ctx.fillStyle = isDarkMode ? '#bae6fd' : '#0c4a6e';
-        ctx.fillText(labelText, lx, pScr.y - 8);
+        ctx.fillText(labelText, labelPosition.x, labelPosition.y);
       }
     });
+
+    // Capa final de distancias: queda por encima de las figuras para mantener trazos continuos y uniformes.
+    if (config.type === 'reflection' && toggles.showReflectionDistances) {
+      const reflectionGuideColors = [
+        '#dc2626', '#2563eb', '#16a34a', '#9333ea',
+        '#ea580c', '#0891b2', '#be123c', '#65a30d'
+      ];
+      const drawDistanceRail = (
+        guide: { p: Point; pPrime: Point; footH: Point },
+        color: string,
+        guideIndex: number
+      ) => {
+        const start = toScreen(guide.p, width, height);
+        const end = toScreen(guide.pPrime, width, height);
+        const foot = toScreen(guide.footH, width, height);
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const length = Math.hypot(dx, dy) || 1;
+        const normalX = -dy / length;
+        const normalY = dx / length;
+        const baseSide = guideIndex % 2 === 0 ? 1 : -1;
+        const laneOffset = ((guideIndex % 5) - 2) * 3.5;
+        const laneStart = { x: start.x + normalX * laneOffset, y: start.y + normalY * laneOffset };
+        const laneEnd = { x: end.x + normalX * laneOffset, y: end.y + normalY * laneOffset };
+        const laneFoot = { x: foot.x + normalX * laneOffset, y: foot.y + normalY * laneOffset };
+        const dash = guideIndex % 2 === 0 ? [5, 4] : [8, 4];
+
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([]);
+        ctx.strokeStyle = `${color}66`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(laneStart.x, laneStart.y);
+        ctx.moveTo(end.x, end.y);
+        ctx.lineTo(laneEnd.x, laneEnd.y);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 5.5;
+        ctx.setLineDash(dash);
+        ctx.beginPath();
+        ctx.moveTo(laneStart.x, laneStart.y);
+        ctx.lineTo(laneEnd.x, laneEnd.y);
+        ctx.stroke();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.25;
+        ctx.stroke();
+
+        const value = formatNum(distance(guide.p, guide.footH));
+        const labelOffset = 13 + (guideIndex % 3) * 5;
+        const drawHalfLabel = (a: { x: number; y: number }, b: { x: number; y: number }, side: 1 | -1) => {
+          const radialShift = side * (labelOffset + Math.abs(laneOffset) * 0.35);
+          const midX = (a.x + b.x) / 2 + normalX * (laneOffset * 0.18 + radialShift);
+          const midY = (a.y + b.y) / 2 + normalY * (laneOffset * 0.18 + radialShift);
+          ctx.font = 'bold 11px "JetBrains Mono", monospace';
+          const textWidth = ctx.measureText(value).width;
+          ctx.setLineDash([]);
+          ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+          ctx.shadowBlur = 4;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.2;
+          ctx.fillRect(midX - textWidth / 2 - 4, midY - 8, textWidth + 8, 16);
+          ctx.strokeRect(midX - textWidth / 2 - 4, midY - 8, textWidth + 8, 16);
+          ctx.fillStyle = color;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(value, midX, midY);
+          ctx.shadowBlur = 0;
+        };
+
+        drawHalfLabel(laneStart, laneFoot, -baseSide as 1 | -1);
+        drawHalfLabel(laneFoot, laneEnd, baseSide as 1 | -1);
+        ctx.restore();
+      };
+
+      engineResult.constructionElements.perpendicularGuides?.forEach((guide, guideIndex) => {
+        drawDistanceRail(guide, reflectionGuideColors[guideIndex % reflectionGuideColors.length], guideIndex);
+      });
+      additionalReflectionGuides.forEach((guides, axisIndex) => {
+        guides.forEach((guide, pointIndex) => {
+          const color = reflectionGuideColors[(axisIndex * 3 + pointIndex + 1) % reflectionGuideColors.length];
+          drawDistanceRail(guide, color, pointIndex);
+        });
+      });
+    }
   }, [
     isActive,
     canvasDimensions,
@@ -1274,6 +1708,9 @@ export function Workspace({
     segmentStartVertex,
     mouseCoord,
     transformedVertices,
+    additionalReflectionVertices,
+    additionalReflectionGuides,
+    activeReflectionAxes,
     gridStyle,
     scale,
     pan,
@@ -1800,7 +2237,7 @@ export function Workspace({
 
   return (
     <div 
-      className="absolute inset-0 flex flex-col w-full h-full overflow-hidden bg-surface text-ink font-sans select-none relative"
+      className="absolute inset-0 flex flex-col w-full h-full overflow-hidden bg-surface text-ink font-sans select-none"
       style={{ display: isActive ? 'flex' : 'none' }}
       onDragOver={(e) => {
         e.preventDefault();
@@ -1854,6 +2291,7 @@ export function Workspace({
         onOpenTheory={() => setIsTheoryOpen(true)}
         isDarkMode={isDarkMode}
         onToggleDarkMode={() => setSettings(prev => ({ ...prev, isDarkMode: !prev.isDarkMode }))}
+        onToggleFullscreen={toggleCanvasFullscreen}
         onExportPNG={handleExportPNG}
         onExportPDF={handleExportPDF}
         onExportProjectJSON={handleExportProjectJSON}
@@ -1902,7 +2340,9 @@ export function Workspace({
         {/* LIENZO DE GEOMETRÍA */}
         <div 
           ref={containerRef}
-          className="relative flex-1 min-h-0 w-full h-full overflow-hidden bg-white dark:bg-[#0b0f19]"
+          className={`relative flex-1 min-h-0 w-full h-full overflow-hidden bg-white dark:bg-[#0b0f19] ${
+            isCanvasFullscreen ? 'z-[99999]' : ''
+          }`}
         >
           <canvas
             ref={canvasRef}
@@ -2012,7 +2452,9 @@ export function Workspace({
           )}
 
           {/* BOTONERA FLOTANTE INFERIOR DERECHA (ZOOM, CENTRAR, EXPORTAR) */}
-          <div className="absolute bottom-4 right-4 sm:bottom-5 sm:right-5 z-20 flex items-center gap-1 bg-surface/90 p-1 sm:p-1.5 rounded-2xl shadow-lg border border-border backdrop-blur-md">
+          <div className={`absolute bottom-4 sm:bottom-5 z-20 flex items-center gap-1 bg-surface/90 p-1 sm:p-1.5 rounded-2xl shadow-lg border border-border backdrop-blur-md ${
+            isSidebarOpen ? 'right-4 lg:right-[400px]' : 'right-4 sm:right-5'
+          }`}>
             <button
               onClick={() => setScale((prev) => Math.min(prev * 1.2, 140))}
               title="Acercar (Zoom +)"
@@ -2063,14 +2505,14 @@ export function Workspace({
         {isSidebarOpen && (
           <div
             onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 md:hidden transition-opacity"
             aria-hidden="true"
           />
         )}
 
         {/* PANEL LATERAL RESPONSIVO (DRAWER EN MÓVIL/TABLETA, ASIDE LATERAL EN DESKTOP) */}
         {isSidebarOpen && (
-          <aside className="fixed lg:relative inset-y-0 right-0 z-50 w-[88vw] max-w-[360px] sm:w-[380px] lg:w-[380px] min-h-0 flex flex-col bg-surface border-l border-border shadow-2xl lg:shadow-none animate-in slide-in-from-right duration-200">
+          <aside className="fixed inset-y-0 right-0 z-50 h-full max-h-full w-[88vw] max-w-[360px] sm:w-[380px] md:relative md:inset-y-auto md:right-auto md:h-auto md:max-h-full md:w-[380px] md:shrink-0 min-h-0 flex flex-col overflow-hidden bg-surface border-l border-border shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
             {/* Cabecera del panel con pestañas internas y botones Guardar / Cerrar */}
             <div className="flex items-center justify-between px-2.5 py-2 border-b border-border bg-panel/80 shrink-0 gap-2">
               <div className="flex items-center gap-0.5 bg-surface p-0.5 rounded-xl border border-border shrink-0">
@@ -2141,7 +2583,7 @@ export function Workspace({
                   toggles={toggles}
                   onUpdateToggles={setToggles}
                   showLabels={showLabels}
-                  onToggleLabels={() => setSettings(prev => ({ ...prev, showLabels: !prev }))}
+                  onToggleLabels={() => setSettings(prev => ({ ...prev, showLabels: !prev.showLabels }))}
                 />
               )}
 

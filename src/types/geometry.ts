@@ -64,6 +64,7 @@ export interface TransformationConfig {
   dy: number;
   // Reflexión axial
   reflectionAxis: ReflectionAxis;
+  reflectionAxes?: ReflectionAxis[]; // Ejes activos simultáneamente en el plano
   customAxisValue: number; // Para x = k o y = k
   generalLine: GeneralLineCoefficients; // Para Ax + By + C = 0
   // Simetría Central
@@ -164,6 +165,8 @@ export interface ClassroomToggles {
   showSideLengths: boolean;
   showInteriorAngles: boolean;
   showConstructionGuides: boolean;
+  showReflectionDistances: boolean;
+  showPoints: boolean;
   showAlgebraicNotebook: boolean;
   cleanBoardMode: boolean;
 }

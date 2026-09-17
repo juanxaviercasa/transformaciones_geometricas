@@ -48,6 +48,7 @@ interface GeoGebraToolbarProps {
   onOpenGuide: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
+  onToggleFullscreen: () => void;
   onExportPNG?: () => void;
   onExportPDF?: () => void;
   onExportProjectJSON?: () => void;
@@ -73,6 +74,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
   onOpenGuide,
   isDarkMode,
   onToggleDarkMode,
+  onToggleFullscreen,
   onExportPNG,
   onExportPDF,
   onExportProjectJSON,
@@ -348,7 +350,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           <button
             onClick={onToggleSidebar}
             title={isSidebarOpen ? 'Cerrar panel de configuración' : 'Abrir panel de configuración'}
-            className={`lg:hidden flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition shrink-0 ${
+            className={`md:hidden flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition shrink-0 ${
               isSidebarOpen
                 ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/40'
                 : 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
@@ -372,7 +374,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           <button
             onClick={onToggleSidebar}
             title={isSidebarOpen ? 'Ocultar panel lateral (Área máxima de pizarra)' : 'Mostrar panel lateral'}
-            className={`hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition shrink-0 ${
+            className={`hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition shrink-0 ${
               isSidebarOpen
                 ? 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
                 : 'bg-panel border-border text-ink hover:border-accent hover:text-accent'
@@ -397,20 +399,8 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
 
           {/* PANTALLA COMPLETA */}
           <button
-            onClick={() => {
-              const docEl = document.documentElement as any;
-              const doc = document as any;
-              if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
-                if (docEl.requestFullscreen) docEl.requestFullscreen().catch(() => {});
-                else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
-                else if (docEl.msRequestFullscreen) docEl.msRequestFullscreen();
-              } else {
-                if (doc.exitFullscreen) doc.exitFullscreen().catch(() => {});
-                else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
-                else if (doc.msExitFullscreen) doc.msExitFullscreen();
-              }
-            }}
-            title="Pantalla Completa"
+            onClick={onToggleFullscreen}
+            title="Pantalla completa del plano cartesiano"
             className="hidden sm:flex p-2 rounded-xl bg-panel text-ink border border-border hover:border-border-strong hover:text-accent transition shrink-0"
           >
             <Maximize className="h-4 w-4" />
