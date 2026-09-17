@@ -97,6 +97,13 @@ export function Workspace({
     type: 'reflection',
     dx: 4,
     dy: 2,
+    translationMode: 'points',
+    translationVectorSet: false,
+    translationVectorCount: 1,
+    translationSecondDx: 0,
+    translationSecondDy: 0,
+    translationSecondVectorSet: false,
+    translationReady: true,
     reflectionAxis: 'custom_x',
     reflectionAxes: ['custom_x'],
     customAxisValue: 2,
@@ -275,6 +282,8 @@ export function Workspace({
   }, [vertices, config]);
 
   const transformedVertices = engineResult.transformedVertices;
+  const secondaryTransformedVertices = engineResult.secondaryTransformedVertices || [];
+  const translationStages = engineResult.translationStages || [];
   const activeReflectionAxes = config.reflectionAxes?.length
     ? config.reflectionAxes
     : [config.reflectionAxis];
@@ -339,23 +348,50 @@ export function Workspace({
 
   // Acción Limpiar Pizarra (Canvas Limpio)
   const handleClearCanvas = () => {
-    commitAction();
     setVertices([]);
     setSegments([]);
     setIsPolygon(false);
     setSegmentStartVertex(null);
     setTool('select');
-    setConfig((prev) => ({
-      ...prev,
+    setPan({ x: 0, y: 0 });
+    setScale(38);
+    setGridStyle('lines');
+    setConfig({
+      type: 'reflection',
+      dx: 4,
+      dy: 2,
+      translationMode: 'points',
+      translationTarget: undefined,
+      translationTargets: [],
+      translationVectorSet: false,
+      translationVectors: undefined,
+      translationVectorCount: 1,
+      translationSecondDx: 0,
+      translationSecondDy: 0,
+      translationSecondVectorSet: false,
+      translationReady: true,
+      reflectionAxis: 'custom_x',
+      reflectionAxes: ['custom_x'],
+      customAxisValue: 2,
+      generalLine: { a: 1, b: 0, c: -2 },
+      centralCenter: { x: 0, y: 0 },
+      angleDeg: 90,
+      direction: 'anticlockwise',
       center: { x: 0, y: 0 },
-      homothetyCenter: { x: 0, y: 0 },
-      centralCenter: { x: 0, y: 0 }
-    }));
+      scaleFactor: 1.5,
+      homothetyCenter: { x: 0, y: 0 }
+    });
+    setUndoStack([]);
+    setRedoStack([]);
+    setProblemMode('DIRECT');
+    setCurrentScenario(null);
+    setCustomStatement('Pizarra interactiva: traza tu figura en el plano o carga un modelo escolar.');
   };
 
   // Cargar figura prediseñada
   const handleLoadPreset = (preset: (typeof SHAPE_PRESETS)[0]) => {
     setVertices(preset.vertices);
+    setConfig((prev) => ({ ...prev, translationTarget: undefined, translationTargets: [], translationReady: true }));
     setIsPolygon(true);
     const segs: [number, number][] = [];
     for (let i = 0; i < preset.vertices.length; i++) {
@@ -375,6 +411,7 @@ export function Workspace({
       { x: 2, y: 5, label: 'C' }
     ];
     setVertices(pts);
+    setConfig((prev) => ({ ...prev, translationTarget: undefined, translationTargets: [], translationReady: true }));
     setIsPolygon(true);
     setSegments([[0, 1], [1, 2], [2, 0]]);
     setSegmentStartVertex(null);
@@ -388,6 +425,7 @@ export function Workspace({
     } else {
       if (vertices.length >= 3) {
         setIsPolygon(true);
+        setConfig((prev) => ({ ...prev, translationReady: true }));
         const segs: [number, number][] = [];
         for (let i = 0; i < vertices.length; i++) {
           segs.push([i, (i + 1) % vertices.length]);
@@ -405,6 +443,7 @@ export function Workspace({
         segs.push([i, i + 1]);
       }
       setSegments(segs);
+      setConfig((prev) => ({ ...prev, translationReady: true }));
     }
   };
 
@@ -412,6 +451,7 @@ export function Workspace({
   const handleClearSegments = () => {
     setSegments([]);
     setIsPolygon(false);
+    setConfig((prev) => ({ ...prev, translationReady: false }));
   };
 
   // Deshacer última acción en el historial
@@ -1005,25 +1045,98 @@ export function Workspace({
       // B) Traslación: Descomposición en catetos Δx, Δy y vector resultante
       if (config.type === 'translation' && engineResult.constructionElements.vectorGuides) {
         ctx.save();
-        engineResult.constructionElements.vectorGuides.forEach((g, idx) => {
-          const s = toScreen(g.start, width, height);
-          const inter = toScreen(g.intermediate, width, height);
-          const e = toScreen(g.end, width, height);
+        const vectorColor = isDarkMode ? '#fbbf24' : '#ea580c';
+        const vectorGuides = engineResult.constructionElements.vectorGuides;
+        const secondaryVectorGuides = engineResult.constructionElements.secondaryVectorGuides || [];
+        const allVectorGuides = [...vectorGuides, ...secondaryVectorGuides];
+        const stageCount = engineResult.constructionElements.translationStageGuides?.length || 1;
+        const verticesPerStage = Math.max(vertices.length, 1);
+        const showVectorLabels = config.translationMode === 'vector'
+          ? stageCount
+          : vectorGuides.length <= 3 ? vectorGuides.length : 0;
+        const vectorLabelObstacles = [
+          ...vertices.map((point) => toScreen(point, width, height)),
+          ...transformedVertices.map((point) => toScreen(point, width, height))
+        ];
+        const distanceToSegment = (
+          point: { x: number; y: number },
+          start: { x: number; y: number },
+          end: { x: number; y: number }
+        ) => {
+          const dx = end.x - start.x;
+          const dy = end.y - start.y;
+          const lengthSquared = dx * dx + dy * dy || 1;
+          const projection = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+          const closestX = start.x + projection * dx;
+          const closestY = start.y + projection * dy;
+          return Math.hypot(point.x - closestX, point.y - closestY);
+        };
 
-          // Pasos horizontales y verticales
-          ctx.strokeStyle = '#93c5fd';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([3, 3]);
-          ctx.beginPath();
-          ctx.moveTo(s.x, s.y);
-          ctx.lineTo(inter.x, inter.y);
-          ctx.lineTo(e.x, e.y);
-          ctx.stroke();
+        const getVectorLabelPosition = (
+          start: { x: number; y: number },
+          end: { x: number; y: number },
+          labelWidth: number,
+          labelHeight: number,
+          guideIndex: number
+        ) => {
+          const lineDx = end.x - start.x;
+          const lineDy = end.y - start.y;
+          const lineLength = Math.hypot(lineDx, lineDy) || 1;
+          const normal = { x: -lineDy / lineLength, y: lineDx / lineLength };
+          const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+          const candidates = [
+            { along: 0, offset: 30 },
+            { along: 0, offset: -30 },
+            { along: -lineLength * 0.18, offset: 30 },
+            { along: lineLength * 0.18, offset: 30 },
+            { along: -lineLength * 0.18, offset: -30 },
+            { along: lineLength * 0.18, offset: -30 },
+            { along: (guideIndex % 3 - 1) * 26, offset: 44 }
+          ];
+          const halfWidth = labelWidth / 2 + 7;
+          const halfHeight = labelHeight / 2 + 7;
+          const padding = 6;
+
+          for (const candidate of candidates) {
+            const center = {
+              x: midpoint.x + (lineDx / lineLength) * candidate.along + normal.x * candidate.offset,
+              y: midpoint.y + (lineDy / lineLength) * candidate.along + normal.y * candidate.offset
+            };
+            const box = {
+              left: center.x - halfWidth,
+              right: center.x + halfWidth,
+              top: center.y - halfHeight,
+              bottom: center.y + halfHeight
+            };
+            const touchesPoint = vectorLabelObstacles.some((point) =>
+              point.x >= box.left - 5 && point.x <= box.right + 5 && point.y >= box.top - 5 && point.y <= box.bottom + 5
+            );
+            const touchesLine = allVectorGuides.some((guide) => {
+              const guideStart = toScreen(guide.start, width, height);
+              const guideEnd = toScreen(guide.end, width, height);
+              return distanceToSegment(center, guideStart, guideEnd) < halfHeight + 5;
+            });
+            const insideCanvas = box.left >= padding && box.right <= width - padding && box.top >= padding && box.bottom <= height - padding;
+            if (!touchesPoint && !touchesLine && insideCanvas) return center;
+          }
+
+          return {
+            x: Math.max(halfWidth + padding, Math.min(width - halfWidth - padding, midpoint.x + normal.x * 30)),
+            y: Math.max(halfHeight + padding, Math.min(height - halfHeight - padding, midpoint.y + normal.y * 30))
+          };
+        };
+
+        allVectorGuides.forEach((g, idx) => {
+          const s = toScreen(g.start, width, height);
+          const e = toScreen(g.end, width, height);
+          const stageIndex = Math.floor(idx / verticesPerStage);
+          const stageColors = isDarkMode ? ['#fbbf24', '#67e8f9', '#c4b5fd', '#86efac', '#fda4af', '#fdba74'] : ['#ea580c', '#0f766e', '#7c3aed', '#15803d', '#be123c', '#c2410c'];
+          const currentVectorColor = stageColors[stageIndex % stageColors.length];
 
           // Vector
-          ctx.strokeStyle = '#2563eb';
-          ctx.fillStyle = '#2563eb';
-          ctx.lineWidth = baseLW - 0.2;
+          ctx.strokeStyle = currentVectorColor;
+          ctx.fillStyle = currentVectorColor;
+          ctx.lineWidth = Math.max(2.5, baseLW + 0.5);
           ctx.setLineDash([]);
           ctx.beginPath();
           ctx.moveTo(s.x, s.y);
@@ -1032,19 +1145,39 @@ export function Workspace({
 
           // Flecha
           const ang = Math.atan2(e.y - s.y, e.x - s.x);
-          const arrLen = 7;
+          const arrLen = 13;
           ctx.beginPath();
           ctx.moveTo(e.x, e.y);
           ctx.lineTo(
-            e.x - arrLen * Math.cos(ang - Math.PI / 6),
-            e.y - arrLen * Math.sin(ang - Math.PI / 6)
+            e.x - arrLen * Math.cos(ang - Math.PI / 5),
+            e.y - arrLen * Math.sin(ang - Math.PI / 5)
           );
           ctx.lineTo(
-            e.x - arrLen * Math.cos(ang + Math.PI / 6),
-            e.y - arrLen * Math.sin(ang + Math.PI / 6)
+            e.x - arrLen * Math.cos(ang + Math.PI / 5),
+            e.y - arrLen * Math.sin(ang + Math.PI / 5)
           );
           ctx.closePath();
           ctx.fill();
+
+          const shouldShowVectorLabel = config.translationMode === 'vector'
+            ? idx % verticesPerStage === 0
+            : idx < showVectorLabels;
+          if (shouldShowVectorLabel) {
+            const vectorLabel = `v̅${stageIndex + 1} = (${formatNum(g.dx)}, ${formatNum(g.dy)})`;
+            ctx.font = 'bold 12px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const labelWidth = ctx.measureText(vectorLabel).width;
+            const labelHeight = 18;
+            const labelPosition = getVectorLabelPosition(s, e, labelWidth, labelHeight, idx);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+            ctx.strokeStyle = currentVectorColor;
+            ctx.lineWidth = 1.2;
+            ctx.fillRect(labelPosition.x - labelWidth / 2 - 5, labelPosition.y - 9, labelWidth + 10, 18);
+            ctx.strokeRect(labelPosition.x - labelWidth / 2 - 5, labelPosition.y - 9, labelWidth + 10, 18);
+            ctx.fillStyle = isDarkMode ? '#fff7ed' : '#431407';
+            ctx.fillText(vectorLabel, labelPosition.x, labelPosition.y);
+          }
         });
         ctx.restore();
       }
@@ -1543,6 +1676,88 @@ export function Workspace({
       }
     }
 
+    // C) ETAPAS INTERMEDIAS DE LA CADENA DE TRASLACIONES.
+    if (config.type === 'translation' && translationStages.length > 1) {
+      const stageColors = isDarkMode ? ['#67e8f9', '#c4b5fd', '#86efac', '#fda4af', '#fdba74'] : ['#0f766e', '#7c3aed', '#15803d', '#be123c', '#c2410c'];
+      translationStages.slice(0, -1).forEach((stage, stageIndex) => {
+        const stageColor = stageColors[stageIndex % stageColors.length];
+        ctx.save();
+        ctx.globalAlpha = 0.72;
+        ctx.strokeStyle = stageColor;
+        ctx.fillStyle = `${stageColor}18`;
+        ctx.lineWidth = baseLW + 0.1;
+        if (isPolygon && stage.length >= 3) {
+          ctx.beginPath();
+          const first = toScreen(stage[0], width, height);
+          ctx.moveTo(first.x, first.y);
+          stage.slice(1).forEach((point) => {
+            const screenPoint = toScreen(point, width, height);
+            ctx.lineTo(screenPoint.x, screenPoint.y);
+          });
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          segments.forEach(([from, to]) => {
+            if (!stage[from] || !stage[to]) return;
+            const start = toScreen(stage[from], width, height);
+            const end = toScreen(stage[to], width, height);
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+          });
+        }
+        if (toggles.showPoints) {
+          stage.forEach((point) => {
+            const screenPoint = toScreen(point, width, height);
+            ctx.beginPath();
+            ctx.arc(screenPoint.x, screenPoint.y, pRad - 0.8, 0, Math.PI * 2);
+            ctx.fillStyle = stageColor;
+            ctx.fill();
+          });
+        }
+        ctx.restore();
+      });
+    }
+
+    // C) COMPATIBILIDAD CON LA SEGUNDA IMAGEN LEGACY.
+    if (config.type === 'translation' && secondaryTransformedVertices.length > 0 && translationStages.length === 0) {
+      const secondaryStroke = isDarkMode ? '#67e8f9' : '#0f766e';
+      const secondaryFill = isDarkMode ? 'rgba(103, 232, 249, 0.16)' : 'rgba(15, 118, 110, 0.12)';
+      ctx.save();
+      if (isPolygon && secondaryTransformedVertices.length >= 3) {
+        ctx.beginPath();
+        const first = toScreen(secondaryTransformedVertices[0], width, height);
+        ctx.moveTo(first.x, first.y);
+        secondaryTransformedVertices.slice(1).forEach((point) => {
+          const screenPoint = toScreen(point, width, height);
+          ctx.lineTo(screenPoint.x, screenPoint.y);
+        });
+        ctx.closePath();
+        ctx.fillStyle = secondaryFill;
+        ctx.fill();
+        ctx.strokeStyle = secondaryStroke;
+        ctx.lineWidth = baseLW + 0.2;
+        ctx.stroke();
+      } else {
+        segments.forEach(([from, to]) => {
+          const start = secondaryTransformedVertices[from];
+          const end = secondaryTransformedVertices[to];
+          if (!start || !end) return;
+          const startScreen = toScreen(start, width, height);
+          const endScreen = toScreen(end, width, height);
+          ctx.strokeStyle = secondaryStroke;
+          ctx.lineWidth = baseLW + 0.2;
+          ctx.beginPath();
+          ctx.moveTo(startScreen.x, startScreen.y);
+          ctx.lineTo(endScreen.x, endScreen.y);
+          ctx.stroke();
+        });
+      }
+      ctx.restore();
+    }
+
     // C) DIBUJAR VÉRTICES (Puntos y sus etiquetas anti-colisión)
     // 1. Vértices de F' (Transformada)
     if (toggles.showPoints) transformedVertices.forEach((pt, i) => {
@@ -1555,7 +1770,7 @@ export function Workspace({
       ctx.lineWidth = baseLW - 0.2;
       ctx.stroke();
 
-      if (showLabels) {
+      if (showLabels && !(config.type === 'reflection' && toggles.showReflectionDistances)) {
         const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
         const labelText = `${cleanName}' (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
         ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
@@ -1567,6 +1782,28 @@ export function Workspace({
         ctx.lineWidth = 3;
         ctx.strokeText(labelText, labelPosition.x, labelPosition.y);
         ctx.fillStyle = isDarkMode ? '#e9d5ff' : '#581c87';
+        ctx.fillText(labelText, labelPosition.x, labelPosition.y);
+      }
+    });
+
+    if (toggles.showPoints) secondaryTransformedVertices.forEach((pt, i) => {
+      const pScr = toScreen(pt, width, height);
+      ctx.beginPath();
+      ctx.arc(pScr.x, pScr.y, pRad - 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = isDarkMode ? '#67e8f9' : '#0f766e';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = baseLW - 0.2;
+      ctx.stroke();
+      if (showLabels && !(config.type === 'reflection' && toggles.showReflectionDistances)) {
+        const baseName = vertices[i]?.label || String.fromCharCode(65 + i);
+        const labelText = `${baseName}'' (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
+        ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
+        const textWidth = ctx.measureText(labelText).width;
+        const labelPosition = getLabelPosition(pScr, textWidth);
+        ctx.textAlign = labelPosition.align;
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = isDarkMode ? '#cffafe' : '#115e59';
         ctx.fillText(labelText, labelPosition.x, labelPosition.y);
       }
     });
@@ -1594,7 +1831,7 @@ export function Workspace({
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      if (showLabels) {
+      if (showLabels && !(config.type === 'reflection' && toggles.showReflectionDistances)) {
         const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
         const labelText = `${cleanName} (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
         ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
@@ -1616,6 +1853,52 @@ export function Workspace({
         '#dc2626', '#2563eb', '#16a34a', '#9333ea',
         '#ea580c', '#0891b2', '#be123c', '#65a30d'
       ];
+      const distanceLabelBoxes: Array<{ left: number; top: number; right: number; bottom: number }> = [];
+      const distancePointObstacles = [
+        ...vertices,
+        ...transformedVertices,
+        ...additionalReflectionVertices.flat()
+      ].map((point) => toScreen(point, width, height));
+      const allDistanceGuides = [
+        ...(engineResult.constructionElements.perpendicularGuides || []),
+        ...additionalReflectionGuides.flat()
+      ];
+      const pointLabelLines: Array<{ start: { x: number; y: number }; end: { x: number; y: number } }> = [];
+      const addPointLabelLines = (points: Point[], closed: boolean) => {
+        if (points.length < 2) return;
+        for (let index = 0; index < points.length - 1; index++) {
+          pointLabelLines.push({
+            start: toScreen(points[index], width, height),
+            end: toScreen(points[index + 1], width, height)
+          });
+        }
+        if (closed) {
+          pointLabelLines.push({
+            start: toScreen(points[points.length - 1], width, height),
+            end: toScreen(points[0], width, height)
+          });
+        }
+      };
+      addPointLabelLines(vertices, isPolygon);
+      addPointLabelLines(transformedVertices, isPolygon);
+      additionalReflectionVertices.forEach((points) => addPointLabelLines(points, isPolygon));
+      if (!isPolygon) {
+        segments.forEach(([from, to]) => {
+          if (vertices[from] && vertices[to]) pointLabelLines.push({ start: toScreen(vertices[from], width, height), end: toScreen(vertices[to], width, height) });
+          if (transformedVertices[from] && transformedVertices[to]) pointLabelLines.push({ start: toScreen(transformedVertices[from], width, height), end: toScreen(transformedVertices[to], width, height) });
+        });
+      }
+      const pointToSegmentDistance = (
+        point: { x: number; y: number },
+        start: { x: number; y: number },
+        end: { x: number; y: number }
+      ) => {
+        const segmentX = end.x - start.x;
+        const segmentY = end.y - start.y;
+        const segmentLength = segmentX * segmentX + segmentY * segmentY || 1;
+        const projection = Math.max(0, Math.min(1, ((point.x - start.x) * segmentX + (point.y - start.y) * segmentY) / segmentLength));
+        return Math.hypot(point.x - (start.x + projection * segmentX), point.y - (start.y + projection * segmentY));
+      };
       const drawDistanceRail = (
         guide: { p: Point; pPrime: Point; footH: Point },
         color: string,
@@ -1661,25 +1944,89 @@ export function Workspace({
         ctx.stroke();
 
         const value = formatNum(distance(guide.p, guide.footH));
-        const labelOffset = 13 + (guideIndex % 3) * 5;
         const drawHalfLabel = (a: { x: number; y: number }, b: { x: number; y: number }, side: 1 | -1) => {
-          const radialShift = side * (labelOffset + Math.abs(laneOffset) * 0.35);
-          const midX = (a.x + b.x) / 2 + normalX * (laneOffset * 0.18 + radialShift);
-          const midY = (a.y + b.y) / 2 + normalY * (laneOffset * 0.18 + radialShift);
           ctx.font = 'bold 11px "JetBrains Mono", monospace';
           const textWidth = ctx.measureText(value).width;
+          const segmentMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+          const halfWidth = textWidth / 2 + 5;
+          const halfHeight = 15;
+          const segmentDx = b.x - a.x;
+          const segmentDy = b.y - a.y;
+          const segmentLength = Math.hypot(segmentDx, segmentDy) || 1;
+          const tangentX = segmentDx / segmentLength;
+          const tangentY = segmentDy / segmentLength;
+          const candidates = [
+            { offset: 20 * side, along: 0 },
+            { offset: 20 * side, along: -18 },
+            { offset: 20 * side, along: 18 },
+            { offset: 26 * side, along: -28 },
+            { offset: 26 * side, along: 28 },
+            { offset: 20 * -side, along: 0 },
+            { offset: 20 * -side, along: -18 },
+            { offset: 20 * -side, along: 18 }
+          ];
+          let position: { x: number; y: number } | null = null;
+
+          for (const offset of candidates) {
+            const candidate = {
+              x: segmentMid.x + tangentX * offset.along + normalX * offset.offset,
+              y: segmentMid.y + tangentY * offset.along + normalY * offset.offset
+            };
+            const box = {
+              left: candidate.x - halfWidth,
+              right: candidate.x + halfWidth,
+              top: candidate.y - halfHeight,
+              bottom: candidate.y + halfHeight
+            };
+            const intersectsPoint = distancePointObstacles.some((point) =>
+              point.x >= box.left - 4 && point.x <= box.right + 4 && point.y >= box.top - 4 && point.y <= box.bottom + 4
+            );
+            const intersectsLabel = distanceLabelBoxes.some((other) =>
+              other.left < box.right && other.right > box.left && other.top < box.bottom && other.bottom > box.top
+            );
+            const intersectsRail = allDistanceGuides.some((otherGuide) => {
+              const otherStart = toScreen(otherGuide.p, width, height);
+              const otherEnd = toScreen(otherGuide.pPrime, width, height);
+              return pointToSegmentDistance(candidate, otherStart, otherEnd) < halfHeight + 3;
+            });
+            if (!intersectsPoint && !intersectsLabel && !intersectsRail && box.left >= 5 && box.right <= width - 5 && box.top >= 5 && box.bottom <= height - 5) {
+              position = candidate;
+              distanceLabelBoxes.push(box);
+              break;
+            }
+          }
+
+          if (!position) {
+            position = {
+              x: Math.max(halfWidth + 5, Math.min(width - halfWidth - 5, segmentMid.x + normalX * 28 * side)),
+              y: Math.max(halfHeight + 5, Math.min(height - halfHeight - 5, segmentMid.y + normalY * 28 * side))
+            };
+            distanceLabelBoxes.push({
+              left: position.x - halfWidth,
+              right: position.x + halfWidth,
+              top: position.y - halfHeight,
+              bottom: position.y + halfHeight
+            });
+          }
           ctx.setLineDash([]);
-          ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
-          ctx.shadowBlur = 4;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+          ctx.strokeStyle = `${color}99`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(segmentMid.x, segmentMid.y);
+          ctx.lineTo(position.x, position.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = isDarkMode ? 'rgba(15, 23, 42, 0.98)' : '#ffffff';
           ctx.strokeStyle = color;
           ctx.lineWidth = 1.2;
-          ctx.fillRect(midX - textWidth / 2 - 4, midY - 8, textWidth + 8, 16);
-          ctx.strokeRect(midX - textWidth / 2 - 4, midY - 8, textWidth + 8, 16);
+          ctx.fillRect(position.x - textWidth / 2 - 4, position.y - 8, textWidth + 8, 16);
+          ctx.strokeRect(position.x - textWidth / 2 - 4, position.y - 8, textWidth + 8, 16);
           ctx.fillStyle = color;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(value, midX, midY);
+          ctx.fillText(value, position.x, position.y);
           ctx.shadowBlur = 0;
         };
 
@@ -1697,6 +2044,59 @@ export function Workspace({
           drawDistanceRail(guide, color, pointIndex);
         });
       });
+
+      // Las coordenadas se dibujan al final para que ningún riel pueda atravesarlas.
+      const drawTopPointLabel = (point: Point, index: number, color: string, suffix = '') => {
+        const screenPoint = toScreen(point, width, height);
+        ctx.beginPath();
+        ctx.arc(screenPoint.x, screenPoint.y, pRad + 0.5, 0, Math.PI * 2);
+        const pointLabelColor = isDarkMode ? '#f8fafc' : '#111827';
+        ctx.fillStyle = pointLabelColor;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        if (!showLabels) return;
+
+        const baseName = (point.label || String.fromCharCode(65 + index)).replace(/'/g, '');
+        const labelText = `${baseName}${suffix} (${formatNum(point.x)}, ${formatNum(point.y)})`;
+        ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
+        const textWidth = ctx.measureText(labelText).width;
+        const labelCandidates = [
+          { x: screenPoint.x + 9, y: screenPoint.y - 10, align: 'left' as CanvasTextAlign },
+          { x: screenPoint.x + 9, y: screenPoint.y + 18, align: 'left' as CanvasTextAlign },
+          { x: screenPoint.x - 9, y: screenPoint.y - 10, align: 'right' as CanvasTextAlign },
+          { x: screenPoint.x - 9, y: screenPoint.y + 18, align: 'right' as CanvasTextAlign },
+          { x: screenPoint.x, y: screenPoint.y - 22, align: 'center' as CanvasTextAlign }
+        ];
+        const labelPosition = labelCandidates.find((candidate) => {
+          const left = candidate.align === 'right' ? candidate.x - textWidth : candidate.align === 'center' ? candidate.x - textWidth / 2 : candidate.x;
+          const right = left + textWidth;
+          const center = { x: (left + right) / 2, y: candidate.y };
+          return pointLabelLines.every((line) => pointToSegmentDistance(center, line.start, line.end) > 14) && left >= 4 && right <= width - 4 && candidate.y - 9 >= 4 && candidate.y + 9 <= height - 4;
+        }) || labelCandidates[0];
+        ctx.textAlign = labelPosition.align;
+        ctx.textBaseline = 'middle';
+        ctx.strokeStyle = isDarkMode ? '#0b0f19' : '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.strokeText(labelText, labelPosition.x, labelPosition.y);
+        ctx.fillStyle = pointLabelColor;
+        ctx.fillText(labelText, labelPosition.x, labelPosition.y);
+      };
+
+      transformedVertices.forEach((point, index) => drawTopPointLabel(
+        { ...point, label: vertices[index]?.label || String.fromCharCode(65 + index) },
+        index,
+        transStroke,
+        "'"
+      ));
+      secondaryTransformedVertices.forEach((point, index) => drawTopPointLabel(
+        { ...point, label: vertices[index]?.label || String.fromCharCode(65 + index) },
+        index,
+        isDarkMode ? '#67e8f9' : '#0f766e',
+        "''"
+      ));
+      vertices.forEach((point, index) => drawTopPointLabel(point, index, point.color || preStroke));
     }
   }, [
     isActive,
@@ -1708,6 +2108,9 @@ export function Workspace({
     segmentStartVertex,
     mouseCoord,
     transformedVertices,
+    secondaryTransformedVertices,
+    ...translationStages.flat(),
+    translationStages,
     additionalReflectionVertices,
     additionalReflectionGuides,
     activeReflectionAxes,
@@ -1740,6 +2143,42 @@ export function Workspace({
     if (tool === 'point') {
       commitAction();
       const cart = toCartesian(clientX, clientY, width, height);
+
+      if (config.type === 'translation') {
+        if (config.translationMode === 'points' && vertices.length === 1) {
+          setConfig((prev) => ({
+            ...prev,
+            dx: cart.x - vertices[0].x,
+            dy: cart.y - vertices[0].y,
+            translationTarget: { ...cart, label: "A'", color: '#2563eb' },
+            translationTargets: [{ ...cart, label: "A'", color: '#2563eb' }],
+            translationReady: true
+          }));
+          return;
+        }
+
+        if (config.translationMode === 'points' && vertices.length > 1) {
+          const targets = [...(config.translationTargets || [])];
+          const targetIndex = vertices.findIndex((_, index) => !targets[index]);
+          if (targetIndex !== -1) {
+            targets[targetIndex] = {
+              ...cart,
+              label: `${vertices[targetIndex].label || String.fromCharCode(65 + targetIndex)}'`,
+              color: '#2563eb'
+            };
+            setConfig((prev) => ({
+              ...prev,
+              translationTargets: targets,
+              translationTarget: targets[0],
+              translationReady: targets.every(Boolean)
+            }));
+            return;
+          }
+        }
+
+        setConfig((prev) => ({ ...prev, translationTarget: undefined, translationTargets: [], translationReady: false }));
+      }
+
       const nextLabel = String.fromCharCode(65 + vertices.length);
       setVertices((prev) => [...prev, { x: cart.x, y: cart.y, label: nextLabel, color: defaultColor }]);
       return;
@@ -1762,10 +2201,16 @@ export function Workspace({
         targetIndex = vertices.length;
         const nextLabel = String.fromCharCode(65 + vertices.length);
         setVertices((prev) => [...prev, { x: cart.x, y: cart.y, label: nextLabel, color: defaultColor }]);
+        if (config.type === 'translation') {
+          setConfig((prev) => ({ ...prev, translationReady: false }));
+        }
       }
 
       if (segmentStartVertex === null) {
         setSegmentStartVertex(targetIndex);
+        if (config.type === 'translation') {
+          setConfig((prev) => ({ ...prev, translationReady: false }));
+        }
       } else {
         if (targetIndex !== segmentStartVertex) {
           const from = segmentStartVertex;
@@ -1775,6 +2220,9 @@ export function Workspace({
           );
           if (!alreadyExists) {
             setSegments((prev) => [...prev, [from, to]]);
+            if (config.type === 'translation') {
+              setConfig((prev) => ({ ...prev, translationReady: true }));
+            }
           }
         }
         setSegmentStartVertex(null);
@@ -1789,6 +2237,9 @@ export function Workspace({
         const firstScr = toScreen(vertices[0], width, height);
         if (Math.hypot(clientX - firstScr.x, clientY - firstScr.y) <= 20) {
           setIsPolygon(true);
+          if (config.type === 'translation') {
+            setConfig((prev) => ({ ...prev, translationReady: true }));
+          }
           const segs: [number, number][] = [];
           for (let i = 0; i < vertices.length; i++) {
             segs.push([i, (i + 1) % vertices.length]);
@@ -1803,6 +2254,9 @@ export function Workspace({
       const nextLabel = String.fromCharCode(65 + vertices.length);
       const newIdx = vertices.length;
       setVertices((prev) => [...prev, { x: cart.x, y: cart.y, label: nextLabel, color: defaultColor }]);
+      if (config.type === 'translation') {
+        setConfig((prev) => ({ ...prev, translationReady: false }));
+      }
       if (newIdx > 0) {
         setSegments((prev) => [...prev, [newIdx - 1, newIdx]]);
       }
@@ -2071,20 +2525,137 @@ export function Workspace({
   };
 
   // Exportar PNG de alta resolución con metadatos de proyecto integrados (Smart PNG)
-  const handleExportPNG = async () => {
+  const handleExportPNG = async (requestedFileName?: string) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const safeFileName = (requestedFileName || 'geotransform')
+      .trim()
+      .replace(/\.png$/i, '')
+      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
+      .replace(/\s+/g, '_')
+      .slice(0, 100) || 'geotransform';
+
+    const logicalWidth = canvasDimensions.width || canvas.getBoundingClientRect().width;
+    const logicalHeight = canvasDimensions.height || canvas.getBoundingClientRect().height;
+    const dpr = window.devicePixelRatio || 1;
+    const geometryPoints: Array<{ x: number; y: number }> = [
+      ...vertices,
+      ...transformedVertices,
+      ...secondaryTransformedVertices,
+      ...additionalReflectionVertices.flat(),
+      ...segments.flatMap(([from, to]) => [vertices[from], vertices[to]]).filter(Boolean)
+    ];
+    const construction = engineResult.constructionElements;
+    construction.vectorGuides?.forEach((guide) => {
+      geometryPoints.push(guide.start, guide.intermediate, guide.end);
+    });
+    construction.perpendicularGuides?.forEach((guide) => {
+      geometryPoints.push(guide.p, guide.footH, guide.pPrime);
+    });
+    construction.rotationArcs?.forEach((arc) => {
+      geometryPoints.push(arc.center, arc.p, arc.pPrime);
+    });
+    construction.homothetyRays?.forEach((ray) => {
+      geometryPoints.push(ray.center, ray.p, ray.pPrime);
+    });
+    construction.centralSymmetrySegments?.forEach((segment) => {
+      geometryPoints.push(segment.center, segment.p, segment.pPrime);
+    });
+    if (activePivot) geometryPoints.push(activePivot);
+
+    const screenPoints = geometryPoints
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+      .map((point) => toScreen(point, logicalWidth, logicalHeight));
+    let bounds = screenPoints.length > 0
+      ? screenPoints.reduce(
+          (current, point) => ({
+            minX: Math.min(current.minX, point.x),
+            minY: Math.min(current.minY, point.y),
+            maxX: Math.max(current.maxX, point.x),
+            maxY: Math.max(current.maxY, point.y)
+          }),
+          { minX: logicalWidth / 2, minY: logicalHeight / 2, maxX: logicalWidth / 2, maxY: logicalHeight / 2 }
+        )
+      : { minX: 0, minY: 0, maxX: logicalWidth, maxY: logicalHeight };
+
+    // Las etiquetas ocupan más espacio que el punto: forman parte del contenido exportable.
+    if (showLabels && screenPoints.length > 0) {
+      const measureCanvas = document.createElement('canvas');
+      const measureCtx = measureCanvas.getContext('2d');
+      if (measureCtx) {
+        measureCtx.font = 'bold 13px "Inter", -apple-system, sans-serif';
+        const labeledPoints = [
+          ...vertices.map((point, index) => ({ point, label: `${(point.label || String.fromCharCode(65 + index)).replace(/'/g, '')} (${formatNum(point.x)}, ${formatNum(point.y)})` })),
+          ...transformedVertices.map((point, index) => ({ point, label: `${(point.label || String.fromCharCode(65 + index)).replace(/'/g, '')}' (${formatNum(point.x)}, ${formatNum(point.y)})` })),
+          ...secondaryTransformedVertices.map((point, index) => ({ point, label: `${(vertices[index]?.label || String.fromCharCode(65 + index))}'' (${formatNum(point.x)}, ${formatNum(point.y)})` })),
+          ...additionalReflectionVertices.flat().map((point, index) => ({ point, label: `${(point.label || String.fromCharCode(65 + index)).replace(/'/g, '')}' (${formatNum(point.x)}, ${formatNum(point.y)})` }))
+        ];
+
+        labeledPoints.forEach(({ point, label }) => {
+          const screenPoint = toScreen(point, logicalWidth, logicalHeight);
+          const labelWidth = measureCtx.measureText(label).width;
+          const horizontalSafety = labelWidth + 18;
+          const verticalSafety = 28;
+          bounds = {
+            minX: Math.min(bounds.minX, screenPoint.x - horizontalSafety),
+            minY: Math.min(bounds.minY, screenPoint.y - verticalSafety),
+            maxX: Math.max(bounds.maxX, screenPoint.x + horizontalSafety),
+            maxY: Math.max(bounds.maxY, screenPoint.y + verticalSafety)
+          };
+        });
+
+        construction.vectorGuides?.forEach((guide) => {
+          const start = toScreen(guide.start, logicalWidth, logicalHeight);
+          const end = toScreen(guide.end, logicalWidth, logicalHeight);
+          const labelWidth = measureCtx.measureText(`v̅ = (${formatNum(guide.dx)}, ${formatNum(guide.dy)})`).width;
+          const midpointX = (start.x + end.x) / 2;
+          const midpointY = (start.y + end.y) / 2 - 12;
+          bounds = {
+            minX: Math.min(bounds.minX, midpointX - labelWidth / 2 - 10),
+            minY: Math.min(bounds.minY, midpointY - 14),
+            maxX: Math.max(bounds.maxX, midpointX + labelWidth / 2 + 10),
+            maxY: Math.max(bounds.maxY, midpointY + 14)
+          };
+        });
+      }
+    }
+
+    const exportPadding = 40;
+    const minimumExportWidth = Math.min(logicalWidth, 420);
+    const minimumExportHeight = Math.min(logicalHeight, 300);
+    const contentWidth = bounds.maxX - bounds.minX + exportPadding * 2;
+    const contentHeight = bounds.maxY - bounds.minY + exportPadding * 2;
+    const cropWidth = Math.min(logicalWidth, Math.max(minimumExportWidth, contentWidth));
+    const cropHeight = Math.min(logicalHeight, Math.max(minimumExportHeight, contentHeight));
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    const cropLeft = Math.max(0, Math.min(logicalWidth - cropWidth, centerX - cropWidth / 2));
+    const cropTop = Math.max(0, Math.min(logicalHeight - cropHeight, centerY - cropHeight / 2));
+    const headerHeight = 48;
 
     const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = canvas.width;
-    exportCanvas.height = canvas.height;
+    exportCanvas.width = Math.round(cropWidth * dpr);
+    exportCanvas.height = Math.round((cropHeight + headerHeight) * dpr);
     const ctx = exportCanvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.drawImage(canvas, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = isDarkMode ? '#0b0f19' : '#ffffff';
+    ctx.fillRect(0, 0, cropWidth, cropHeight + headerHeight);
+    ctx.drawImage(
+      canvas,
+      Math.round(cropLeft * dpr),
+      Math.round(cropTop * dpr),
+      Math.round(cropWidth * dpr),
+      Math.round(cropHeight * dpr),
+      0,
+      headerHeight,
+      cropWidth,
+      cropHeight
+    );
 
     ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.fillRect(0, 0, exportCanvas.width, 50);
+    ctx.fillRect(0, 0, cropWidth, headerHeight);
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 15px "Inter", sans-serif';
@@ -2112,7 +2683,7 @@ export function Workspace({
         const smartBlob = await embedProjectInPNG(blob, projectData);
         const url = URL.createObjectURL(smartBlob);
         const link = document.createElement('a');
-        link.download = `geotransform_${config.type}_${Date.now()}.png`;
+        link.download = `${safeFileName}.png`;
         link.href = url;
         link.click();
         URL.revokeObjectURL(url);
@@ -2121,7 +2692,7 @@ export function Workspace({
         console.error(err);
         const dataUrl = exportCanvas.toDataURL('image/png');
         const link = document.createElement('a');
-        link.download = `geotransform_${config.type}_${Date.now()}.png`;
+        link.download = `${safeFileName}.png`;
         link.href = dataUrl;
         link.click();
       }
@@ -2276,7 +2847,14 @@ export function Workspace({
         activeTool={tool}
         onSelectTool={setTool}
         activeTransformation={config.type}
-        onSelectTransformation={(type) => setConfig((prev) => ({ ...prev, type }))}
+        onSelectTransformation={(type) => setConfig((prev) => ({
+          ...prev,
+          type,
+          translationMode: type === 'translation' ? 'points' : prev.translationMode,
+          translationTarget: type === 'translation' ? undefined : prev.translationTarget,
+          translationTargets: type === 'translation' ? [] : prev.translationTargets,
+          translationVectorSet: type === 'translation' ? false : prev.translationVectorSet
+        }))}
         onClearCanvas={handleClearCanvas}
         onOpenPresets={() => setIsPresetsOpen(true)}
         onOpenGuide={() => setIsGuideOpen(true)}

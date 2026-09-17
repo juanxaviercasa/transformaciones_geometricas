@@ -35,6 +35,7 @@ export function solveGeometryProblem(
   config: TransformationConfig
 ): ProblemEngineResult {
   const transformedVertices: Point[] = [];
+  const secondaryTransformedVertices: Point[] = [];
   const constructionElements: ConstructionElements = {};
   const algebraicSteps: AlgebraicStep[] = [];
 
@@ -45,7 +46,9 @@ export function solveGeometryProblem(
 
   switch (config.type) {
     case 'translation': {
-      generalFormula = `(x', y') = (x + (${formatNum(config.dx)}), y + (${formatNum(config.dy)}))`;
+      generalFormula = (config.translationVectors?.length || config.translationVectorCount || 1) > 1
+        ? 'F₀ → F₁ → F₂ → ... (cada etapa aplica un vector a la anterior)'
+        : `(x', y') = (x + (${formatNum(config.dx)}), y + (${formatNum(config.dy)}))`;
       isometryType = 'Isometría Directa (Conserva longitudes, ángulos y orientación)';
       invariants = [
         'Conserva las distancias entre cualquier par de puntos: d(P, Q) = d(P\', Q\').',
@@ -53,27 +56,78 @@ export function solveGeometryProblem(
         'El vector director v = (Δx, Δy) es idéntico para todos los vértices del plano.',
         'No existen puntos dobles (invariantes), salvo que v sea el vector nulo (0,0).'
       ];
-      pedagogicalNotes = `Cada vértice P(x, y) se desplaza simultáneamente ${formatNum(config.dx)} unidades en el eje X y ${formatNum(config.dy)} unidades en el eje Y.`;
+      pedagogicalNotes = (config.translationVectors?.length || config.translationVectorCount || 1) > 1
+        ? 'Cada vector se aplica a la imagen obtenida en la etapa anterior.'
+        : `Cada vértice P(x, y) se desplaza simultáneamente ${formatNum(config.dx)} unidades en el eje X y ${formatNum(config.dy)} unidades en el eje Y.`;
 
       const vectorGuides = [];
+      const translationStageGuides = [];
+      const translationStages = [];
+      const isPointPairMode = config.translationMode === 'points';
+      const translationTargets = config.translationTargets?.length
+        ? config.translationTargets
+        : config.translationTarget
+          ? [config.translationTarget]
+          : [];
+      const hasPointPair = vertices.length > 0 && vertices.length === translationTargets.length && translationTargets.every(Boolean);
+      const vectors = config.translationVectors?.length
+        ? config.translationVectors
+        : [
+            { dx: config.dx, dy: config.dy, set: config.translationVectorSet },
+            ...(config.translationVectorCount === 2
+              ? [{ dx: config.translationSecondDx || 0, dy: config.translationSecondDy || 0, set: config.translationSecondVectorSet }]
+              : [])
+          ];
+      const hasVector = config.translationMode !== 'points' && vectors.every((vector) => vector.set !== false);
+      const isFigureReady = config.translationReady !== false;
+      const secondaryVectorGuides = [];
+
+      if (!isFigureReady || (isPointPairMode && !hasPointPair) || (!isPointPairMode && !hasVector)) {
+        break;
+      }
+
+      let currentStage = vertices;
+      for (let stageIndex = 0; stageIndex < vectors.length; stageIndex++) {
+        const vector = vectors[stageIndex];
+        const stageVertices: Point[] = [];
+        const stageGuides = [];
+        currentStage.forEach((p, i) => {
+          const source = vertices[i];
+          const vName = source.label || String.fromCharCode(65 + i);
+          const nextPoint: Point = {
+            x: Number((p.x + vector.dx).toFixed(2)),
+            y: Number((p.y + vector.dy).toFixed(2)),
+            label: `${vName}'${stageIndex + 1}`
+          };
+          stageVertices.push(nextPoint);
+          stageGuides.push({
+            start: p,
+            intermediate: p,
+            end: nextPoint,
+            dx: vector.dx,
+            dy: vector.dy
+          });
+        });
+        translationStages.push(stageVertices);
+        translationStageGuides.push(stageGuides);
+        currentStage = stageVertices;
+      }
+
+      const finalStage = translationStages[translationStages.length - 1] || [];
+      transformedVertices.push(...finalStage);
+      if (translationStages.length > 1) secondaryTransformedVertices.push(...translationStages[0]);
+      translationStageGuides.forEach((guides) => vectorGuides.push(...guides));
 
       for (let i = 0; i < vertices.length; i++) {
         const p = vertices[i];
+        const target = isPointPairMode ? translationTargets[i] : undefined;
+        const finalPoint = finalStage[i];
+        const dx = target ? target.x - p.x : finalPoint.x - p.x;
+        const dy = target ? target.y - p.y : finalPoint.y - p.y;
         const vName = p.label || String.fromCharCode(65 + i);
-        const xPrime = Number((p.x + config.dx).toFixed(2));
-        const yPrime = Number((p.y + config.dy).toFixed(2));
-        const pPrime: Point = { x: xPrime, y: yPrime, label: `${vName}'` };
-        transformedVertices.push(pPrime);
-
-        // Descomposición vectorial: cateto horizontal + cateto vertical
-        const intermediatePoint: Point = { x: xPrime, y: p.y };
-        vectorGuides.push({
-          start: p,
-          intermediate: intermediatePoint,
-          end: pPrime,
-          dx: config.dx,
-          dy: config.dy
-        });
+        const xPrime = finalPoint.x;
+        const yPrime = finalPoint.y;
+        const pPrime = finalPoint;
 
         algebraicSteps.push({
           vertexName: vName,
@@ -81,14 +135,16 @@ export function solveGeometryProblem(
           targetPoint: pPrime,
           formula: `P' = (x + v_x, y + v_y)`,
           substitutionLines: [
-            `x' = ${formatNum(p.x)} + (${formatNum(config.dx)}) = ${formatNum(xPrime)}`,
-            `y' = ${formatNum(p.y)} + (${formatNum(config.dy)}) = ${formatNum(yPrime)}`
+            `x' = ${formatNum(p.x)} + (${formatNum(dx)}) = ${formatNum(xPrime)}`,
+            `y' = ${formatNum(p.y)} + (${formatNum(dy)}) = ${formatNum(yPrime)}`
           ],
           resultLine: `${vName}'(${formatNum(xPrime)}, ${formatNum(yPrime)})`
         });
       }
 
       constructionElements.vectorGuides = vectorGuides;
+      constructionElements.translationStageGuides = translationStageGuides;
+      if (secondaryVectorGuides.length > 0) constructionElements.secondaryVectorGuides = secondaryVectorGuides;
       break;
     }
 
@@ -416,6 +472,7 @@ export function solveGeometryProblem(
 
   return {
     transformedVertices,
+    secondaryTransformedVertices,
     constructionElements,
     algebraicSteps,
     generalFormula,

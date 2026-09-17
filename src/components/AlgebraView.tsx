@@ -99,6 +99,75 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
     }));
   };
 
+  const updateTranslationOrigin = (axis: 'x' | 'y', value: number) => {
+    const origin = vertices[0] || { x: 0, y: 0 };
+    const updatedOrigin = { ...origin, [axis]: value };
+    const currentOrigin = vertices[0] || { x: 0, y: 0, label: 'A' };
+    onUpdateVertices([{ ...currentOrigin, ...updatedOrigin }, ...vertices.slice(1)]);
+    const target = config.translationTargets?.[0] || config.translationTarget;
+    if (target) {
+      onUpdateConfig((previous) => ({
+        ...previous,
+        dx: target.x - updatedOrigin.x,
+        dy: target.y - updatedOrigin.y,
+        translationTarget: target,
+        translationTargets: previous.translationTargets
+      }));
+    }
+  };
+
+  const updateTranslationTarget = (index: number, axis: 'x' | 'y', value: number) => {
+    const currentTarget = config.translationTargets?.[index] || (index === 0 ? config.translationTarget : undefined);
+    const target = {
+      ...(currentTarget || { x: 0, y: 0 }),
+      [axis]: value
+    };
+    const targets = [...(config.translationTargets || [])];
+    targets[index] = { ...target, label: `${vertices[index]?.label || String.fromCharCode(65 + index)}'`, color: '#2563eb' };
+    onUpdateConfig((previous) => ({
+      ...previous,
+      dx: index === 0 && vertices[0] ? target.x - vertices[0].x : previous.dx,
+      dy: index === 0 && vertices[0] ? target.y - vertices[0].y : previous.dy,
+      translationTarget: targets[0],
+      translationTargets: targets
+    }));
+  };
+
+  const renderTranslationPointInputs = (
+    label: string,
+    point: Point | undefined,
+    onChange: (axis: 'x' | 'y', value: number) => void,
+    compact = false
+  ) => (
+    <div className={`grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 ${compact ? 'min-w-[230px]' : ''}`}>
+      <span className="truncate font-sans text-[10px] font-semibold text-ink-soft">{label}</span>
+      {(['x', 'y'] as const).map((axis) => (
+        <label key={axis} className="flex min-w-0 items-center gap-1 font-sans text-[10px] text-ink-soft">
+          <span>{axis.toUpperCase()}:</span>
+          <input
+            type="number"
+            value={point?.[axis] ?? ''}
+            placeholder="-"
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              if (!Number.isNaN(value)) onChange(axis, value);
+            }}
+            className="w-14 min-w-0 rounded-lg border border-border bg-surface px-1.5 py-1 text-center font-mono text-[11px] font-bold text-ink outline-none focus:ring-2 focus:ring-accent"
+          />
+        </label>
+      ))}
+    </div>
+  );
+
+  const translationVectors = config.translationVectors?.length
+    ? config.translationVectors
+    : [
+        { dx: config.dx, dy: config.dy, set: config.translationVectorSet },
+        ...(config.translationVectorCount === 2
+          ? [{ dx: config.translationSecondDx || 0, dy: config.translationSecondDy || 0, set: config.translationSecondVectorSet }]
+          : [])
+      ];
+
   // Cálculo de perímetro y área básica por fórmula de Gauss (Shoelace) para polígonos cerrados
   const polygonMetrics = React.useMemo(() => {
     if (!isPolygon || vertices.length < 3) return { area: 0, perimeter: 0 };
@@ -509,56 +578,103 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
 
         {config.type === 'translation' && (
           <div className="p-3 rounded-xl bg-panel border border-border space-y-2 font-mono text-xs">
-            <div className="flex justify-between font-semibold text-accent">
-              <span>Vector v:</span>
-              <span>({config.dx}, {config.dy})</span>
+            <div className="grid grid-cols-2 gap-1 font-sans text-[10px]">
+              <button
+                type="button"
+                onClick={() => onUpdateConfig((prev) => ({
+                  ...prev,
+                  translationMode: 'points',
+                }))}
+                onMouseDown={() => onSetTool('point')}
+                className={`rounded-lg border px-2 py-1.5 font-bold transition ${config.translationMode !== 'vector' ? 'bg-accent text-white border-accent' : 'bg-surface border-border text-ink-soft'}`}
+              >
+                Puntos
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateConfig((prev) => ({
+                  ...prev,
+                  translationMode: 'vector',
+                  translationVectorSet: true
+                }))}
+                onMouseDown={() => onSetTool('point')}
+                className={`rounded-lg border px-2 py-1.5 font-bold transition ${config.translationMode === 'vector' ? 'bg-accent text-white border-accent' : 'bg-surface border-border text-ink-soft'}`}
+              >
+                Vector
+              </button>
             </div>
-            <div className="space-y-1.5 pt-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-ink-soft w-8 font-sans">Δx:</span>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  value={config.dx}
-                  onChange={(e) =>
-                    onUpdateConfig((prev) => ({ ...prev, dx: parseInt(e.target.value) }))
-                  }
-                  className="flex-1 accent-accent"
-                />
-                <input
-                  type="number"
-                  value={config.dx}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value);
-                    if (!isNaN(v)) onUpdateConfig((prev) => ({ ...prev, dx: v }));
-                  }}
-                  className="w-14 text-center font-bold bg-surface border border-border rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-accent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-ink-soft w-8 font-sans">Δy:</span>
-                <input
-                  type="range"
-                  min="-12"
-                  max="12"
-                  value={config.dy}
-                  onChange={(e) =>
-                    onUpdateConfig((prev) => ({ ...prev, dy: parseInt(e.target.value) }))
-                  }
-                  className="flex-1 accent-accent"
-                />
-                <input
-                  type="number"
-                  value={config.dy}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value);
-                    if (!isNaN(v)) onUpdateConfig((prev) => ({ ...prev, dy: v }));
-                  }}
-                  className="w-14 text-center font-bold bg-surface border border-border rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-accent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
+            <div className="flex items-center justify-between gap-2 font-semibold text-accent">
+              <span>{translationVectors.length === 1 ? 'Vector' : `${translationVectors.length} vectores`}</span>
+              <span className="shrink-0 rounded-md bg-accent/10 px-2 py-0.5 text-[10px]">Cadena</span>
             </div>
+            <p className="font-sans text-[10px] leading-tight text-ink-soft">
+              {config.translationMode === 'vector'
+                ? 'Coloca el punto inicial y define el vector para obtener su imagen.'
+                : 'Escribe las coordenadas o coloca ambos puntos en el plano.'}
+            </p>
+            {config.translationMode === 'points' && (
+              <div className="space-y-2 rounded-lg border border-border/70 bg-surface/60 p-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border pb-1 font-sans text-[9px] font-bold uppercase text-ink-faint">
+                  <span>Correspondencia</span><span>X</span><span>Y</span>
+                </div>
+                <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
+                  {vertices.map((point, index) => {
+                    const target = config.translationTargets?.[index] || (index === 0 ? config.translationTarget : undefined);
+                    const name = point.label || String.fromCharCode(65 + index);
+                    return (
+                      <div key={`${name}-${index}`} className="space-y-1 rounded-lg border border-border/60 bg-panel/60 p-1.5">
+                        {renderTranslationPointInputs(`${name} inicial`, point, (axis, value) => {
+                          if (index === 0) updateTranslationOrigin(axis, value);
+                          else {
+                            const updated = [...vertices];
+                            updated[index] = { ...updated[index], [axis]: value };
+                            onUpdateVertices(updated);
+                          }
+                        }, true)}
+                        {renderTranslationPointInputs(`${name}' final`, target, (axis, value) => updateTranslationTarget(index, axis, value), true)}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div className="max-h-44 space-y-1.5 overflow-y-auto pt-1 pr-1">
+              {translationVectors.map((vector, index) => (
+                <div key={index} className="rounded-lg border border-border/70 bg-surface/70 p-2">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="font-sans text-[10px] font-bold text-accent">Vector v̅{index + 1}</span>
+                    {translationVectors.length > 1 && <button type="button" title="Quitar vector" onClick={() => onUpdateConfig((previous) => ({ ...previous, translationVectors: translationVectors.filter((_, vectorIndex) => vectorIndex !== index) }))} className="rounded-md px-2 py-0.5 font-bold text-rose-600 hover:bg-rose-50">Quitar</button>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex min-w-0 items-center gap-1.5 font-sans text-[10px] text-ink-soft">
+                    <span className="shrink-0">Δx</span>
+                    <input type="number" step="1" value={vector.dx} disabled={config.translationMode !== 'vector'} onChange={(event) => {
+                      const value = parseInt(event.target.value);
+                      if (!Number.isNaN(value)) onUpdateConfig((previous) => {
+                        const next = [...translationVectors]; next[index] = { ...next[index], dx: value, set: true };
+                        return { ...previous, translationVectors: next, dx: next[0].dx, translationVectorSet: true };
+                      });
+                    }} className="w-full min-w-0 rounded-md border border-border bg-panel px-2 py-1.5 text-center font-mono text-xs font-bold outline-none focus:ring-2 focus:ring-accent" />
+                    </label>
+                    <label className="flex min-w-0 items-center gap-1.5 font-sans text-[10px] text-ink-soft">
+                    <span className="shrink-0">Δy</span>
+                    <input type="number" step="1" value={vector.dy} disabled={config.translationMode !== 'vector'} onChange={(event) => {
+                      const value = parseInt(event.target.value);
+                      if (!Number.isNaN(value)) onUpdateConfig((previous) => {
+                        const next = [...translationVectors]; next[index] = { ...next[index], dy: value, set: true };
+                        return { ...previous, translationVectors: next, dy: next[0].dy, translationVectorSet: true };
+                      });
+                    }} className="w-full min-w-0 rounded-md border border-border bg-panel px-2 py-1.5 text-center font-mono text-xs font-bold outline-none focus:ring-2 focus:ring-accent" />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {config.translationMode === 'vector' && translationVectors.length < 6 && (
+              <button type="button" onClick={() => onUpdateConfig((previous) => ({ ...previous, translationVectors: [...translationVectors, { dx: 0, dy: 0, set: true }] }))} className="w-full rounded-lg border border-accent/30 bg-accent/5 px-2 py-1.5 font-sans text-[10px] font-bold text-accent transition hover:bg-accent/10">
+                + Añadir vector
+              </button>
+            )}
           </div>
         )}
 

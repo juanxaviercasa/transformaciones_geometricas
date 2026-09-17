@@ -62,6 +62,16 @@ export interface TransformationConfig {
   // Traslación
   dx: number;
   dy: number;
+  translationMode?: 'points' | 'vector';
+  translationTarget?: Point;
+  translationTargets?: Array<Point | undefined>;
+  translationVectorSet?: boolean;
+  translationVectors?: Array<{ dx: number; dy: number; set?: boolean }>;
+  translationVectorCount?: 1 | 2;
+  translationSecondDx?: number;
+  translationSecondDy?: number;
+  translationSecondVectorSet?: boolean;
+  translationReady?: boolean;
   // Reflexión axial
   reflectionAxis: ReflectionAxis;
   reflectionAxes?: ReflectionAxis[]; // Ejes activos simultáneamente en el plano
@@ -119,6 +129,8 @@ export interface CentralSymmetryConstruction {
 
 export interface ConstructionElements {
   vectorGuides?: VectorDecomposition[];
+  translationStageGuides?: VectorDecomposition[][];
+  secondaryVectorGuides?: VectorDecomposition[];
   perpendicularGuides?: PerpendicularConstruction[];
   rotationArcs?: RotationArcConstruction[];
   homothetyRays?: HomothetyRayConstruction[];
@@ -136,6 +148,8 @@ export interface AlgebraicStep {
 
 export interface ProblemEngineResult {
   transformedVertices: Point[];
+  secondaryTransformedVertices?: Point[];
+  translationStages?: Point[][];
   constructionElements: ConstructionElements;
   algebraicSteps: AlgebraicStep[];
   generalFormula: string;

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   MousePointer,
   Hexagon,
@@ -49,7 +49,7 @@ interface GeoGebraToolbarProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   onToggleFullscreen: () => void;
-  onExportPNG?: () => void;
+  onExportPNG?: (fileName?: string) => void;
   onExportPDF?: () => void;
   onExportProjectJSON?: () => void;
   onLoadProject?: (file: File) => void;
@@ -82,7 +82,12 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
 }) => {
   const [isTransformMenuOpen, setIsTransformMenuOpen] = useState(false);
   const [isSaveMenuOpen, setIsSaveMenuOpen] = useState(false);
+  const [exportFileName, setExportFileName] = useState('geotransform');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (isSidebarOpen) setIsSaveMenuOpen(false);
+  }, [isSidebarOpen]);
 
 
   const getTransformationIcon = (type: TransformationType) => {
@@ -335,7 +340,10 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
 
           {/* BOTÓN GUARDAR / EXPORTAR */}
           <button
-            onClick={() => setIsSaveMenuOpen(true)}
+            onClick={() => {
+              if (isSidebarOpen) onToggleSidebar();
+              setIsSaveMenuOpen(true);
+            }}
             title="Guardar / Exportar proyecto o imagen"
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-accent text-white hover:bg-accent/90 transition shadow-sm shrink-0 cursor-pointer active:scale-95"
           >
@@ -511,10 +519,21 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
               </button>
             </div>
 
+            <label className="block px-2 pb-2 font-sans text-[10px] font-semibold text-ink-soft">
+              Nombre del archivo
+              <input
+                type="text"
+                value={exportFileName}
+                onChange={(event) => setExportFileName(event.target.value)}
+                placeholder="Mi transformación"
+                className="mt-1.5 w-full rounded-xl border border-border bg-panel px-2.5 py-2 font-mono text-xs text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </label>
+
             <div className="flex flex-col gap-1.5">
               <button
                 onClick={() => {
-                  if (onExportPNG) onExportPNG();
+                  if (onExportPNG) onExportPNG(exportFileName);
                   setIsSaveMenuOpen(false);
                 }}
                 className="flex items-center gap-3 w-full p-2.5 rounded-2xl text-left text-ink hover:bg-panel transition cursor-pointer"
