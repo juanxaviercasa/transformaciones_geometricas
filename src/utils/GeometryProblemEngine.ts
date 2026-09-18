@@ -4,7 +4,9 @@ import {
   ConstructionElements,
   AlgebraicStep,
   ProblemEngineResult,
-  ProblemScenario
+  ProblemScenario,
+  ProblemMode,
+  ProblemDifficulty
 } from '../types/geometry';
 
 /**
@@ -487,11 +489,117 @@ export function solveGeometryProblem(
 /**
  * Banco curricular de problemas escolares de secundaria (3° a 5°)
  */
+const randomFromArray = <T,>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
+
+const buildBaseTriangle = (centerX: number, centerY: number, scale: number): Point[] => {
+  const cx = centerX;
+  const cy = centerY;
+  return [
+    { x: cx - scale, y: cy + scale * 0.4, label: 'A' },
+    { x: cx + scale * 1.4, y: cy + scale * 0.6, label: 'B' },
+    { x: cx + scale * 0.6, y: cy - scale * 1.4, label: 'C' }
+  ];
+};
+
+const problemTypePoolByDifficulty: Record<ProblemDifficulty, Array<ProblemScenario['targetConfig']['type']>> = {
+  básico: ['translation', 'reflection', 'rotation'],
+  intermedio: ['translation', 'reflection', 'rotation', 'homothety'],
+  avanzado: ['translation', 'reflection', 'rotation', 'central_reflection', 'homothety']
+};
+
+export function generateRandomProblemScenario(
+  difficulty: ProblemDifficulty = 'básico',
+  mode: ProblemMode = 'DIRECT',
+  preferredType?: ProblemScenario['targetConfig']['type']
+): ProblemScenario {
+  const levelBias = {
+    básico: { scale: [1.5, 2.2], offset: [-1, 2], angle: [90, 180], k: [1.5, 2.5], custom: [-2, 3] },
+    intermedio: { scale: [2, 3], offset: [-2, 3], angle: [90, 180, 270], k: [1.8, 3, -1.8], custom: [-3, 4] },
+    avanzado: { scale: [2.5, 4], offset: [-3, 4], angle: [90, 180, 270], k: [2, 3, -2, -3], custom: [-4, 5] }
+  }[difficulty];
+
+  const randomScale = () => Number((Math.random() * (levelBias.scale[1] - levelBias.scale[0]) + levelBias.scale[0]).toFixed(1));
+  const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const randomOffset = () => Number((Math.random() * (levelBias.offset[1] - levelBias.offset[0]) + levelBias.offset[0]).toFixed(1));
+  const randomCustom = () => Number((Math.random() * (levelBias.custom[1] - levelBias.custom[0]) + levelBias.custom[0]).toFixed(1));
+
+  const transformationType = preferredType ?? randomFromArray(problemTypePoolByDifficulty[difficulty]);
+
+  const baseVertices = buildBaseTriangle(randomOffset(), randomOffset(), randomScale());
+  const title = {
+    translation: `Traslación aleatoria con vector v = (${randomInt(-4, 4)}, ${randomInt(-4, 4)})`,
+    reflection: `Reflexión respecto a ${randomFromArray(['el eje x', 'el eje y', 'la recta x = k', 'la recta y = k'])}`,
+    rotation: `Rotación de ${randomFromArray([90, 180, 270])}° con centro aleatorio`,
+    central_reflection: 'Simetría central respecto a un punto del plano',
+    homothety: `Homotecia con razón k = ${randomFromArray([-3, -2, -1.5, 1.5, 2, 3])}`
+  }[transformationType];
+
+  const dx = randomInt(-5, 5);
+  const dy = randomInt(-4, 4);
+  const axis = randomFromArray(['x', 'y', 'custom_x', 'custom_y'] as const);
+  const customAxis = randomCustom();
+  const angle = randomFromArray(levelBias.angle);
+  const center = { x: randomOffset(), y: randomOffset() };
+  const k = randomFromArray(levelBias.k as number[]);
+  const homothetyCenter = { x: randomOffset(), y: randomOffset() };
+
+  const statementByType: Record<ProblemScenario['targetConfig']['type'], string> = {
+    translation: `Traslada la figura ABC según el vector v = (${dx}, ${dy}) y determina la imagen A'B'C'.`,
+    reflection: `Aplica la reflexión de la figura ABC respecto a ${axis === 'x' ? 'el eje x' : axis === 'y' ? 'el eje y' : axis === 'custom_x' ? `la recta x = ${formatNum(customAxis)}` : axis === 'custom_y' ? `la recta y = ${formatNum(customAxis)}` : 'la recta y = x'} y muestra su imagen.` ,
+    rotation: `Gira la figura ABC alrededor del punto O(${formatNum(center.x)}, ${formatNum(center.y)}) un ángulo de ${angle}° y describe la imagen resultante.` ,
+    central_reflection: `Encuentra la imagen de la figura ABC mediante una simetría central con centro en O(${formatNum(center.x)}, ${formatNum(center.y)}).`,
+    homothety: `Aplica una homotecia con centro O(${formatNum(homothetyCenter.x)}, ${formatNum(homothetyCenter.y)}) y razón k = ${formatNum(k)} a la figura ABC.`
+  };
+
+  const scenario: ProblemScenario = {
+    id: `rand-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    mode,
+    category: {
+      translation: 'Traslación',
+      reflection: 'Simetría Axial',
+      rotation: 'Rotación',
+      central_reflection: 'Simetría Central',
+      homothety: 'Homotecia'
+    }[transformationType],
+    difficulty,
+    title,
+    statement: statementByType[transformationType],
+    presetVertices: baseVertices,
+    targetConfig: {
+      type: transformationType,
+      dx,
+      dy,
+      reflectionAxis: axis,
+      customAxisValue: customAxis,
+      generalLine: { a: 1, b: 0, c: -customAxis },
+      centralCenter: center,
+      angleDeg: angle,
+      direction: randomFromArray(['anticlockwise', 'clockwise'] as const),
+      center,
+      scaleFactor: k,
+      homothetyCenter,
+      translationMode: 'vector',
+      translationTarget: undefined,
+      translationTargets: [],
+      translationVectorSet: true,
+      translationVectors: [{ dx, dy, set: true }],
+      translationVectorCount: 1,
+      translationSecondDx: 0,
+      translationSecondDy: 0,
+      translationSecondVectorSet: false,
+      translationReady: true
+    }
+  };
+
+  return scenario;
+}
+
 export const CLASSROOM_PROBLEMS: ProblemScenario[] = [
   {
     id: 'prob-1-axial-line',
     mode: 'DIRECT',
     category: 'Simetría Axial',
+    difficulty: 'básico',
     title: 'Reflexión respecto a la recta vertical x = 2',
     statement:
       'Halla las coordenadas del triángulo A\'B\'C\' que resulta de aplicar una simetría axial al triángulo ABC con vértices A(1, 1), B(4, 2) y C(2, 5) respecto a la recta x = 2.',
@@ -519,6 +627,7 @@ export const CLASSROOM_PROBLEMS: ProblemScenario[] = [
     id: 'prob-2-translation',
     mode: 'DIRECT',
     category: 'Traslación',
+    difficulty: 'básico',
     title: 'Traslación con vector v = (5, -3)',
     statement:
       'Dado el triángulo con vértices A(-3, 2), B(1, 4) y C(-1, 6), determina las coordenadas de la figura trasladada según el vector v = (5, -3).',
@@ -546,6 +655,7 @@ export const CLASSROOM_PROBLEMS: ProblemScenario[] = [
     id: 'prob-3-rotation-pivot',
     mode: 'DIRECT',
     category: 'Rotación',
+    difficulty: 'básico',
     title: 'Giro de 90° antihorario con centro C(1, 2)',
     statement:
       'Aplica una rotación de 90° en sentido antihorario con centro en el punto C(1, 2) al polígono de vértices A(2, 2), B(5, 2), C(4, 5).',
@@ -573,6 +683,7 @@ export const CLASSROOM_PROBLEMS: ProblemScenario[] = [
     id: 'prob-4-central-symmetry',
     mode: 'DIRECT',
     category: 'Simetría Central',
+    difficulty: 'intermedio',
     title: 'Simetría central respecto al punto O(2, 1)',
     statement:
       'Calcula analíticamente los vértices del cuadrilátero simétrico a ABCD respecto al punto O(2, 1), siendo A(1, 2), B(3, 4), C(5, 3) y D(3, 1).',
@@ -601,6 +712,7 @@ export const CLASSROOM_PROBLEMS: ProblemScenario[] = [
     id: 'prob-5-homothety-inverse',
     mode: 'DIRECT',
     category: 'Homotecia',
+    difficulty: 'intermedio',
     title: 'Homotecia inversa k = -1.5 centrada en O(0, 0)',
     statement:
       'Dibuja y calcula las coordenadas de la figura homotética obtenida al aplicar una razón k = -1.5 con centro en el origen al triángulo A(2, 1), B(4, 1), C(2, 4). Explica por qué la figura queda invertida.',
@@ -624,11 +736,124 @@ export const CLASSROOM_PROBLEMS: ProblemScenario[] = [
       homothetyCenter: { x: 0, y: 0 }
     }
   },
-  // PROBLEMAS INVERSOS (DEDUCCIÓN)
+  {
+    id: 'prob-6-reflection-custom-y',
+    mode: 'DIRECT',
+    category: 'Simetría Axial',
+    difficulty: 'intermedio',
+    title: 'Reflexión respecto a la recta y = -1',
+    statement:
+      'Obtén la imagen del triángulo A(1, 1), B(3, 1), C(2, 4) al reflejarlo respecto a la recta horizontal y = -1.',
+    presetVertices: [
+      { x: 1, y: 1, label: 'A' },
+      { x: 3, y: 1, label: 'B' },
+      { x: 2, y: 4, label: 'C' }
+    ],
+    targetConfig: {
+      type: 'reflection',
+      dx: 0,
+      dy: 0,
+      reflectionAxis: 'custom_y',
+      customAxisValue: -1,
+      generalLine: { a: 0, b: 1, c: 1 },
+      centralCenter: { x: 0, y: 0 },
+      angleDeg: 0,
+      direction: 'anticlockwise',
+      center: { x: 0, y: 0 },
+      scaleFactor: 1,
+      homothetyCenter: { x: 0, y: 0 }
+    }
+  },
+  {
+    id: 'prob-7-rotation-180',
+    mode: 'DIRECT',
+    category: 'Rotación',
+    difficulty: 'avanzado',
+    title: 'Rotación de 180° alrededor del punto O(-1, 2)',
+    statement:
+      'Aplica una rotación de 180° con centro en O(-1, 2) a los puntos A(2, 3), B(4, 1) y C(3, 5). Calcula la imagen final.',
+    presetVertices: [
+      { x: 2, y: 3, label: 'A' },
+      { x: 4, y: 1, label: 'B' },
+      { x: 3, y: 5, label: 'C' }
+    ],
+    targetConfig: {
+      type: 'rotation',
+      dx: 0,
+      dy: 0,
+      reflectionAxis: 'x',
+      customAxisValue: 0,
+      generalLine: { a: 0, b: 1, c: 0 },
+      centralCenter: { x: 0, y: 0 },
+      angleDeg: 180,
+      direction: 'anticlockwise',
+      center: { x: -1, y: 2 },
+      scaleFactor: 1,
+      homothetyCenter: { x: 0, y: 0 }
+    }
+  },
+  {
+    id: 'prob-8-homothety-scaled',
+    mode: 'DIRECT',
+    category: 'Homotecia',
+    difficulty: 'avanzado',
+    title: 'Homotecia con razón k = 2 y centro O(1, -1)',
+    statement:
+      'Encuentra la imagen del cuadrilátero A(0, 0), B(2, 0), C(2, 2), D(0, 2) al aplicar una homotecia de razón 2 con centro en O(1, -1).',
+    presetVertices: [
+      { x: 0, y: 0, label: 'A' },
+      { x: 2, y: 0, label: 'B' },
+      { x: 2, y: 2, label: 'C' },
+      { x: 0, y: 2, label: 'D' }
+    ],
+    targetConfig: {
+      type: 'homothety',
+      dx: 0,
+      dy: 0,
+      reflectionAxis: 'x',
+      customAxisValue: 0,
+      generalLine: { a: 0, b: 1, c: 0 },
+      centralCenter: { x: 0, y: 0 },
+      angleDeg: 0,
+      direction: 'anticlockwise',
+      center: { x: 0, y: 0 },
+      scaleFactor: 2,
+      homothetyCenter: { x: 1, y: -1 }
+    }
+  },
+  {
+    id: 'prob-9-composed-translation-reflection',
+    mode: 'DIRECT',
+    category: 'Composición',
+    difficulty: 'avanzado',
+    title: 'Traslación seguida de reflexión',
+    statement:
+      'Primero traslada el triángulo A(1, 1), B(3, 2), C(2, 5) con vector v = (2, -1) y después refleja la imagen respecto al eje y = 1. Determina la posición final.',
+    presetVertices: [
+      { x: 1, y: 1, label: 'A' },
+      { x: 3, y: 2, label: 'B' },
+      { x: 2, y: 5, label: 'C' }
+    ],
+    targetConfig: {
+      type: 'reflection',
+      dx: 2,
+      dy: -1,
+      reflectionAxis: 'custom_y',
+      customAxisValue: 1,
+      generalLine: { a: 0, b: 1, c: -1 },
+      centralCenter: { x: 0, y: 0 },
+      angleDeg: 0,
+      direction: 'anticlockwise',
+      center: { x: 0, y: 0 },
+      scaleFactor: 1,
+      homothetyCenter: { x: 0, y: 0 }
+    }
+  },
   {
     id: 'prob-inv-1-vector',
     mode: 'INVERSE',
     category: 'Problema Inverso: Deducir Traslación',
+    difficulty: 'básico',
     title: '¿Qué traslación transforma F en F\'?',
     statement:
       'Observa las dos figuras en el plano: la figura original F (verde) y la figura imagen F\' (azul). Determina el vector director de traslación v = (Δx, Δy) comparando sus vértices correspondientes.',
@@ -662,6 +887,7 @@ export const CLASSROOM_PROBLEMS: ProblemScenario[] = [
     id: 'prob-inv-2-axis',
     mode: 'INVERSE',
     category: 'Problema Inverso: Deducir Eje de Reflexión',
+    difficulty: 'intermedio',
     title: 'Identifica la recta de simetría axial',
     statement:
       'Las figuras F y F\' son simétricas. Encuentra la ecuación del eje de simetría calculando el punto medio de los segmentos AA\', BB\' y CC\'.',
@@ -689,6 +915,39 @@ export const CLASSROOM_PROBLEMS: ProblemScenario[] = [
       hint: 'El punto medio entre A(-2, 2) y A\'(4, 2) es M = ((-2+4)/2, 2) = (1, 2). Observa si todos los puntos medios tienen la misma abscisa.',
       explanation:
         'Todos los segmentos que unen cada punto con su imagen tienen punto medio con coordenada x = 1 y son horizontales. Por tanto, el eje mediatriz es la recta vertical x = 1.'
+    }
+  },
+  {
+    id: 'prob-inv-3-homothety',
+    mode: 'INVERSE',
+    category: 'Problema Inverso: Deducir Homotecia',
+    difficulty: 'avanzado',
+    title: '¿Cuál es la razón y el centro de homotecia?',
+    statement:
+      'La figura original F y su imagen F\' son homotéticas. Identifica si el centro está en el origen o fuera de él y determina la razón k comparando las distancias desde el centro a cada vértice.',
+    presetVertices: [
+      { x: -2, y: 1, label: 'A' },
+      { x: 0, y: 1, label: 'B' },
+      { x: -2, y: 4, label: 'C' }
+    ],
+    targetConfig: {
+      type: 'homothety',
+      dx: 0,
+      dy: 0,
+      reflectionAxis: 'x',
+      customAxisValue: 0,
+      generalLine: { a: 0, b: 1, c: 0 },
+      centralCenter: { x: 0, y: 0 },
+      angleDeg: 0,
+      direction: 'anticlockwise',
+      center: { x: 0, y: 0 },
+      scaleFactor: -2,
+      homothetyCenter: { x: 0, y: 0 }
+    },
+    inverseOptions: {
+      suggestedType: 'homothety',
+      hint: 'Compara la distancia del centro a cada punto con la distancia del centro a su imagen. La razón es el cociente entre ambos segmentos.',
+      explanation: 'Si la imagen está al lado opuesto del centro y su distancia es el doble, entonces la razón es negativa y la figura se invierte.'
     }
   }
 ];

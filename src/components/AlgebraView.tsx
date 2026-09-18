@@ -25,7 +25,8 @@ import {
   Hexagon,
   Link2,
   Unlink,
-  Layers
+  Layers,
+  Sparkles
 } from 'lucide-react';
 
 interface AlgebraViewProps {
@@ -86,6 +87,12 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
   const activeReflectionAxes = config.reflectionAxes?.length
     ? config.reflectionAxes
     : [config.reflectionAxis];
+
+  const [homothetyKInput, setHomothetyKInput] = React.useState(String(config.scaleFactor));
+
+  React.useEffect(() => {
+    setHomothetyKInput(String(config.scaleFactor));
+  }, [config.scaleFactor]);
 
   const toggleReflectionAxis = (axis: ReflectionAxis) => {
     const nextAxes = activeReflectionAxes.includes(axis)
@@ -199,21 +206,72 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
     onUpdateSegments(segments.filter((_, idx) => idx !== segIndex));
   };
 
+  const transformationLabel = config.type === 'reflection' ? 'Simetría axial' :
+    config.type === 'translation' ? 'Traslación' :
+    config.type === 'rotation' ? 'Rotación' :
+    config.type === 'central_reflection' ? 'Simetría central' :
+    'Homotecia';
+
+  const figureStateLabel = isPolygon
+    ? 'Polígono cerrado'
+    : segments.length > 0
+      ? `Segmentos (${segments.length})`
+      : `Puntos libres (${vertices.length})`;
+
   return (
     <div className="h-full min-h-0 bg-surface text-ink text-xs font-sans overflow-y-auto overscroll-contain p-3.5 space-y-4">
+      <div className="rounded-2xl border border-accent/20 bg-gradient-to-br from-accent/12 via-sky-500/5 to-transparent p-3 shadow-sm ring-1 ring-accent/10">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/10 text-accent shadow-sm ring-1 ring-accent/20">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-accent">Trabajo activo</div>
+              <div className="text-sm font-bold text-ink">Espacio de transformación</div>
+            </div>
+          </div>
+          <span className="rounded-full border border-accent/20 bg-white/70 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-accent dark:bg-slate-900/60">
+            {transformationLabel}
+          </span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="rounded-xl border border-border bg-panel/80 p-2">
+            <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-ink-faint">Figura</div>
+            <div className="mt-1 text-xs font-bold text-ink">{figureStateLabel}</div>
+          </div>
+          <div className="rounded-xl border border-border bg-panel/80 p-2">
+            <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-ink-faint">Vértices</div>
+            <div className="mt-1 text-xs font-bold text-ink">{vertices.length}</div>
+          </div>
+          <div className="rounded-xl border border-border bg-panel/80 p-2">
+            <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-ink-faint">Objetivo</div>
+            <div className="mt-1 text-xs font-bold text-ink">{isPolygon ? 'Área y perímetro' : 'Construcción'}</div>
+          </div>
+        </div>
+      </div>
+
       {/* 1. SECCIÓN: FIGURA PREIMAGEN (OBJETO ORIGINAL F) */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-blue-600 inline-block" />
-            Preimagen F ({vertices.length} Vértices)
-          </span>
-          <button
-            onClick={onOpenCoordsModal}
-            className="flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline"
-          >
-            <Plus className="h-3 w-3" /> Agregar (x, y)
-          </button>
+        <div className="rounded-2xl border border-blue-200/70 bg-gradient-to-r from-blue-500/8 via-sky-400/5 to-transparent p-2.5 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-blue-600 inline-block" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">
+                Figura inicial
+              </span>
+            </div>
+            <button
+              onClick={onOpenCoordsModal}
+              className="flex items-center gap-1 rounded-lg border border-blue-200 bg-white/70 px-2 py-1 text-[10px] font-semibold text-accent shadow-sm transition hover:border-accent hover:bg-blue-50 dark:bg-slate-900/60 dark:hover:bg-slate-800"
+            >
+              <Plus className="h-3 w-3" /> Agregar (x, y)
+            </button>
+          </div>
+          <div className="mt-2 text-xs font-semibold text-ink">
+            Preimagen F ({vertices.length} vértices)
+          </div>
         </div>
 
         {vertices.length === 0 ? (
@@ -369,10 +427,17 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
 
       {/* 2. SECCIÓN: OPCIONES DE VISUALIZACIÓN EN PIZARRA (LÍNEAS GUÍA, MEDIDAS, COORDENADAS) */}
       <div className="space-y-2 pt-2 border-t border-border">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint flex items-center gap-1.5">
-          <Layers className="h-3 w-3 text-accent" />
-          Opciones de Visualización en Pizarra
-        </span>
+        <div className="rounded-2xl border border-accent/20 bg-gradient-to-r from-accent/10 via-transparent to-sky-500/5 p-2.5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Layers className="h-3.5 w-3.5 text-accent" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">
+              Visualización
+            </span>
+          </div>
+          <div className="mt-1 text-xs font-semibold text-ink">
+            Opciones de la pizarra
+          </div>
+        </div>
 
         <div className="p-2.5 rounded-2xl bg-panel border border-border space-y-2">
           {/* Toggle Líneas Guía */}
@@ -526,6 +591,18 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
 
       {/* 2. SECCIÓN: ELEMENTO RECTOR / PARÁMETROS DE LA TRANSFORMACIÓN */}
       <div className="space-y-3 pt-2 border-t border-border">
+        <div className="rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-2.5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">
+              Transformación
+            </span>
+          </div>
+          <div className="mt-1 text-xs font-semibold text-ink">
+            Parámetros del movimiento geométrico
+          </div>
+        </div>
+
         {/* Selector de Transformación Activa */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
@@ -885,79 +962,227 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
             </div>
 
             {/* Centro de rotación C */}
-            <div className="flex justify-between items-center pt-2 border-t border-border/80 font-sans">
-              <div className="flex items-center gap-1.5">
-                <Target className="h-3.5 w-3.5 text-amber-600" />
-                <span className="text-ink-soft text-xs">Centro C:</span>
-                <span className="font-mono text-amber-700 font-bold text-xs">
-                  ({config.center.x}, {config.center.y})
-                </span>
+            <div className="pt-2 border-t border-border/80 space-y-2 font-sans">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-1.5">
+                  <Target className="h-3.5 w-3.5 text-amber-600" />
+                  <span className="text-ink-soft text-xs">Centro C:</span>
+                </div>
+                <button
+                  onClick={() => onSetTool('pivot')}
+                  title="Hacer clic en la pizarra para fijar un nuevo centro de giro"
+                  className="px-2.5 py-1 text-xs rounded-lg bg-surface border border-border hover:border-amber-500 hover:text-amber-700 font-semibold transition"
+                >
+                  Fijar en Pizarra
+                </button>
               </div>
-              <button
-                onClick={() => onSetTool('pivot')}
-                title="Hacer clic en la pizarra para fijar un nuevo centro de giro"
-                className="px-2.5 py-1 text-xs rounded-lg bg-surface border border-border hover:border-amber-500 hover:text-amber-700 font-semibold transition"
-              >
-                Fijar en Pizarra
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="space-y-1 text-[10px] text-ink-soft">
+                  <span>X</span>
+                  <input
+                    type="number"
+                    value={config.center.x}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isNaN(value)) {
+                        onUpdateConfig((prev) => ({ ...prev, center: { ...prev.center, x: value } }));
+                      }
+                    }}
+                    className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </label>
+                <label className="space-y-1 text-[10px] text-ink-soft">
+                  <span>Y</span>
+                  <input
+                    type="number"
+                    value={config.center.y}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (!Number.isNaN(value)) {
+                        onUpdateConfig((prev) => ({ ...prev, center: { ...prev.center, y: value } }));
+                      }
+                    }}
+                    className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </label>
+              </div>
+              <div className="font-mono text-amber-700 font-bold text-xs text-right">
+                ({config.center.x}, {config.center.y})
+              </div>
             </div>
           </div>
         )}
 
-        {config.type === 'homothety' && (
-          <div className="p-3 rounded-xl bg-panel border border-border space-y-2 font-mono text-xs">
-            <div className="flex justify-between font-semibold text-purple-600">
-              <span>Razón k:</span>
-              <span>{config.scaleFactor}x</span>
+        {config.type === 'homothety' && (() => {
+          const applyScale = (nextValue: number) => {
+            if (!Number.isFinite(nextValue)) return;
+            onUpdateConfig((prev) => ({
+              ...prev,
+              scaleFactor: Number(nextValue.toFixed(2))
+            }));
+          };
+          const presets = [-3, -2, -0.5, 0.5, 2, 3];
+          const classicExamples = [
+            { value: -3, label: '-3' },
+            { value: -2, label: '-2' },
+            { value: -0.5, label: '-1/2' },
+            { value: 0.5, label: '1/2' },
+            { value: 2, label: '2' },
+            { value: 3, label: '3' }
+          ];
+
+          return (
+            <div className="p-3 rounded-xl bg-panel border border-border space-y-2 font-mono text-xs">
+              <div className="flex justify-between font-semibold text-purple-600">
+                <span>Razón k:</span>
+                <span>{config.scaleFactor.toFixed(2)}x</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 font-sans">
+                <button
+                  onClick={() => applyScale(Math.abs(config.scaleFactor))}
+                  className={`flex items-center justify-center py-1.5 px-2 rounded-lg text-[11px] font-semibold border transition ${
+                    config.scaleFactor >= 0
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                      : 'bg-surface text-ink border-border hover:bg-black/5'
+                  }`}
+                >
+                  Mismo lado (+)
+                </button>
+                <button
+                  onClick={() => applyScale(-Math.abs(config.scaleFactor))}
+                  className={`flex items-center justify-center py-1.5 px-2 rounded-lg text-[11px] font-semibold border transition ${
+                    config.scaleFactor < 0
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                      : 'bg-surface text-ink border-border hover:bg-black/5'
+                  }`}
+                >
+                  Lado opuesto (-)
+                </button>
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                <div className="text-[10px] text-ink-soft font-sans">Ejemplos clásicos</div>
+                <div className="grid grid-cols-2 gap-1.5 font-sans">
+                  {classicExamples.map((example) => (
+                    <button
+                      key={example.label}
+                      onClick={() => applyScale(example.value)}
+                      className={`rounded-md border px-2 py-1 text-[10px] font-semibold transition ${
+                        Number(config.scaleFactor.toFixed(2)) === Number(example.value.toFixed(2))
+                          ? 'border-purple-600 bg-purple-600 text-white'
+                          : 'border-purple-200 bg-purple-100 text-purple-700 hover:border-purple-400'
+                      }`}
+                    >
+                      {example.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-[1fr_auto] gap-2 items-center font-sans">
+                <input
+                  type="number"
+                  step="0.1"
+                  value={homothetyKInput}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    setHomothetyKInput(e.target.value);
+                  }}
+                  onBlur={() => {
+                    const raw = homothetyKInput.trim();
+                    if (raw === '') {
+                      setHomothetyKInput(String(config.scaleFactor));
+                      return;
+                    }
+
+                    const parsed = Number.parseFloat(raw);
+                    if (!Number.isNaN(parsed)) {
+                      applyScale(parsed);
+                    } else {
+                      setHomothetyKInput(String(config.scaleFactor));
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const raw = homothetyKInput.trim();
+                      if (raw === '') {
+                        setHomothetyKInput(String(config.scaleFactor));
+                        return;
+                      }
+
+                      const parsed = Number.parseFloat(raw);
+                      if (!Number.isNaN(parsed)) {
+                        applyScale(parsed);
+                      } else {
+                        setHomothetyKInput(String(config.scaleFactor));
+                      }
+                    }
+                  }}
+                  className="w-full text-center font-bold text-purple-700 bg-surface border border-purple-300 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-purple-400"
+                />
+                <span className="text-[10px] text-ink-soft">k exacto</span>
+              </div>
+
+              <div className="space-y-1.5 text-[10px] text-ink-soft font-sans leading-relaxed">
+                <div className="font-mono text-purple-700 font-bold tracking-tight">P' = O + k(P - O)</div>
+                <div>
+                  <span className="font-semibold text-purple-700">k &gt; 0</span> = mismo lado, <span className="font-semibold text-purple-700">k &lt; 0</span> = opuesto. <span className="font-semibold text-purple-700">|k| &lt; 1</span> = reducción, <span className="font-semibold text-purple-700">|k| &gt; 1</span> = ampliación.
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-1 font-sans">
+                <div className="flex justify-between items-center">
+                  <span className="text-ink-soft">Centro O:</span>
+                  <button
+                    onClick={() => onSetTool('pivot')}
+                    className="px-2 py-0.5 text-[11px] rounded bg-surface border border-border hover:border-purple-500"
+                  >
+                    Mover
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1 text-[10px] text-ink-soft">
+                    <span>X</span>
+                    <input
+                      type="number"
+                      value={config.homothetyCenter.x}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        if (!Number.isNaN(value)) {
+                          onUpdateConfig((prev) => ({ ...prev, homothetyCenter: { ...prev.homothetyCenter, x: value } }));
+                        }
+                      }}
+                      className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </label>
+                  <label className="space-y-1 text-[10px] text-ink-soft">
+                    <span>Y</span>
+                    <input
+                      type="number"
+                      value={config.homothetyCenter.y}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        if (!Number.isNaN(value)) {
+                          onUpdateConfig((prev) => ({ ...prev, homothetyCenter: { ...prev.homothetyCenter, y: value } }));
+                        }
+                      }}
+                      className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </label>
+                </div>
+                <div className="font-mono text-purple-700 font-bold text-xs text-right">
+                  ({config.homothetyCenter.x}, {config.homothetyCenter.y})
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="-3"
-                max="3"
-                step="0.25"
-                value={config.scaleFactor}
-                onChange={(e) =>
-                  onUpdateConfig((prev) => ({
-                    ...prev,
-                    scaleFactor: parseFloat(e.target.value)
-                  }))
-                }
-                className="flex-1 accent-purple-600"
-              />
-              <input
-                type="number"
-                step="0.25"
-                value={config.scaleFactor}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (!isNaN(v) && v !== 0) onUpdateConfig((prev) => ({ ...prev, scaleFactor: v }));
-                }}
-                className="w-14 text-center font-bold text-purple-700 bg-surface border border-purple-300 rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-purple-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
-            <div className="flex justify-between items-center pt-1 font-sans">
-              <span className="text-ink-soft">Centro O:</span>
-              <span className="font-mono text-purple-700 font-bold">
-                ({config.homothetyCenter.x}, {config.homothetyCenter.y})
-              </span>
-              <button
-                onClick={() => onSetTool('pivot')}
-                className="px-2 py-0.5 text-[11px] rounded bg-surface border border-border hover:border-purple-500"
-              >
-                Mover
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {config.type === 'central_reflection' && (
           <div className="p-3 rounded-xl bg-panel border border-border space-y-2 font-mono text-xs">
             <div className="flex justify-between items-center">
               <span className="text-ink-soft font-sans">Centro O:</span>
-              <span className="text-sky-600 font-bold">
-                ({config.centralCenter.x}, {config.centralCenter.y})
-              </span>
               <button
                 onClick={() => onSetTool('pivot')}
                 className="px-2 py-0.5 text-[11px] rounded bg-surface border border-border hover:border-sky-500 font-sans"
@@ -965,16 +1190,56 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
                 Mover
               </button>
             </div>
+            <div className="grid grid-cols-2 gap-2 font-sans">
+              <label className="space-y-1 text-[10px] text-ink-soft">
+                <span>X</span>
+                <input
+                  type="number"
+                  value={config.centralCenter.x}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    if (!Number.isNaN(value)) {
+                      onUpdateConfig((prev) => ({ ...prev, centralCenter: { ...prev.centralCenter, x: value } }));
+                    }
+                  }}
+                  className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              </label>
+              <label className="space-y-1 text-[10px] text-ink-soft">
+                <span>Y</span>
+                <input
+                  type="number"
+                  value={config.centralCenter.y}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    if (!Number.isNaN(value)) {
+                      onUpdateConfig((prev) => ({ ...prev, centralCenter: { ...prev.centralCenter, y: value } }));
+                    }
+                  }}
+                  className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              </label>
+            </div>
+            <div className="text-sky-600 font-bold text-xs text-right">
+              ({config.centralCenter.x}, {config.centralCenter.y})
+            </div>
           </div>
         )}
       </div>
 
       {/* 3. SECCIÓN: FIGURA IMAGEN (OBJETO TRANSFORMADO F') */}
       <div className="space-y-2 pt-2 border-t border-border">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-purple-600 inline-block" />
-          Imagen Transformada F' ({transformedVertices.length} Vértices)
-        </span>
+        <div className="rounded-2xl border border-purple-200/70 bg-gradient-to-r from-purple-500/8 via-violet-500/5 to-transparent p-2.5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-purple-600 inline-block" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-purple-700 dark:text-purple-300">
+              Imagen transformada
+            </span>
+          </div>
+          <div className="mt-1 text-xs font-semibold text-ink">
+            F' ({transformedVertices.length} vértices)
+          </div>
+        </div>
 
         {transformedVertices.length > 0 && (
           <div className="space-y-1.5">

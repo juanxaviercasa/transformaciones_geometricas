@@ -36,6 +36,7 @@ import {
   Minimize,
   Plus,
   Info,
+  History,
   Sun,
   Moon,
   PanelRightClose,
@@ -58,7 +59,8 @@ import {
   distance,
   midpoint,
   formatNum,
-  CLASSROOM_PROBLEMS
+  CLASSROOM_PROBLEMS,
+  generateRandomProblemScenario
 } from '../utils/GeometryProblemEngine';
 import { GeoGebraToolbar } from './GeoGebraToolbar';
 import { AlgebraView } from './AlgebraView';
@@ -112,7 +114,7 @@ export function Workspace({
     angleDeg: 90,
     direction: 'anticlockwise',
     center: { x: 0, y: 0 },
-    scaleFactor: 1.5,
+    scaleFactor: 3,
     homothetyCenter: { x: 0, y: 0 }
   });
 
@@ -128,9 +130,85 @@ export function Workspace({
   // 4. ESTADO DE PROBLEMA Y CONSIGNA
   const [problemMode, setProblemMode] = useState<ProblemMode>('DIRECT');
   const [currentScenario, setCurrentScenario] = useState<ProblemScenario | null>(null);
+  const [selectedProblemTab, setSelectedProblemTab] = useState<'selector' | 'ejercicio'>('selector');
+  const [studyMode, setStudyMode] = useState<'ruta' | 'libre'>('ruta');
+  const [selectedProblemDifficulty, setSelectedProblemDifficulty] = useState<'básico' | 'intermedio' | 'avanzado'>('básico');
+  const [selectedProblemType, setSelectedProblemType] = useState<ProblemScenario['targetConfig']['type'] | 'todos'>('todos');
+  const [studySessionCount, setStudySessionCount] = useState(0);
+  const [completedProblemIds, setCompletedProblemIds] = useState<string[]>([]);
   const [customStatement, setCustomStatement] = useState<string>(
     'Pizarra interactiva: traza tu figura en el plano o carga un modelo escolar.'
   );
+
+  const levelOrder = ['básico', 'intermedio', 'avanzado'] as const;
+  const levelTargets = { básico: 0, intermedio: 3, avanzado: 3 } as const;
+
+  const completedCountByDifficulty = useMemo(() => {
+    return levelOrder.reduce((acc, level) => {
+      acc[level] = CLASSROOM_PROBLEMS.filter((problem) => problem.difficulty === level && completedProblemIds.includes(problem.id)).length;
+      return acc;
+    }, {} as Record<typeof levelOrder[number], number>);
+  }, [completedProblemIds]);
+
+  const unlockedLevels = useMemo(() => ({
+    básico: true,
+    intermedio: completedCountByDifficulty.básico >= levelTargets.intermedio,
+    avanzado: completedCountByDifficulty.intermedio >= levelTargets.avanzado
+  }), [completedCountByDifficulty]);
+
+  const nextStudySuggestion = useMemo(() => {
+    if (studyMode === 'libre') {
+      return 'Modo repaso libre: practica distintos tipos de transformación sin afectar la ruta de progreso.';
+    }
+    if (selectedProblemType === 'translation') return 'Siguiente actividad sugerida: practica la traslación con vector en el plano y compara Δx y Δy.';
+    if (selectedProblemType === 'reflection') return 'Siguiente actividad sugerida: identifica el eje de simetría y comprueba que la distancia a la recta se conserve.';
+    if (selectedProblemType === 'rotation') return 'Siguiente actividad sugerida: calcula el centro y el ángulo de giro; compara orientación y distancia.';
+    if (selectedProblemType === 'central_reflection') return 'Siguiente actividad sugerida: busca el punto medio entre cada vértice y su imagen.';
+    if (selectedProblemType === 'homothety') return 'Siguiente actividad sugerida: comprueba la razón k y cómo cambia la distancia respecto al centro.';
+    if (selectedProblemDifficulty === 'avanzado') return 'Siguiente actividad sugerida: intenta un reto avanzado con varias transformaciones o un enunciado más completo.';
+    if (selectedProblemDifficulty === 'intermedio') return 'Siguiente actividad sugerida: combina un ejercicio de nivel intermedio con un tipo diferente de transformación.';
+    return 'Siguiente actividad sugerida: empieza con un problema básico y consolida la idea principal antes de avanzar.';
+  }, [selectedProblemDifficulty, selectedProblemType, studyMode]);
+
+  const markCurrentProblemAsCompleted = useCallback(() => {
+    if (!currentScenario) return;
+
+    setCompletedProblemIds((prev) =>
+      prev.includes(currentScenario.id) ? prev : [...prev, currentScenario.id]
+    );
+  }, [currentScenario]);
+
+  const handleGenerateRandomProblem = useCallback((difficulty: 'básico' | 'intermedio' | 'avanzado' | 'todos' = 'todos') => {
+    const targetDifficulty = studyMode === 'ruta'
+      ? selectedProblemDifficulty
+      : difficulty === 'todos'
+        ? (['básico', 'intermedio', 'avanzado'] as const)[Math.floor(Math.random() * 3)]
+        : difficulty;
+    const generated = generateRandomProblemScenario(
+      targetDifficulty,
+      problemMode,
+      selectedProblemType === 'todos' ? undefined : selectedProblemType
+    );
+    setCurrentScenario(generated);
+    setSelectedProblemTab('ejercicio');
+    setStudySessionCount((prev) => prev + 1);
+  }, [problemMode, selectedProblemDifficulty, selectedProblemType, studyMode]);
+
+  const openScenario = useCallback((problem: ProblemScenario) => {
+    setCurrentScenario(problem);
+    setSelectedProblemTab('ejercicio');
+    setStudySessionCount((prev) => prev + 1);
+  }, []);
+
+  const filteredProblemsByDifficulty = useMemo(() => {
+    return (['básico', 'intermedio', 'avanzado'] as const).reduce((acc, difficulty) => {
+      acc[difficulty] = CLASSROOM_PROBLEMS.filter((problem) => {
+        const matchesType = selectedProblemType === 'todos' || problem.targetConfig.type === selectedProblemType;
+        return problem.difficulty === difficulty && matchesType;
+      });
+      return acc;
+    }, {} as Record<'básico' | 'intermedio' | 'avanzado', typeof CLASSROOM_PROBLEMS>);
+  }, [selectedProblemType]);
 
   // 5. PESTAÑAS DEL PANEL LATERAL RESPONSIVO
   const [sidebarTab, setSidebarTab] = useState<'algebra' | 'notebook' | 'problem'>('algebra');
@@ -142,7 +220,16 @@ export function Workspace({
     return false;
   });
   const [isTheoryOpen, setIsTheoryOpen] = useState<boolean>(false);
+  const [isNotebookOpen, setIsNotebookOpen] = useState<boolean>(false);
+  const [isProblemOpen, setIsProblemOpen] = useState<boolean>(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
   const [isCanvasFullscreen, setIsCanvasFullscreen] = useState(false);
+
+  const closeContentViews = useCallback(() => {
+    setIsTheoryOpen(false);
+    setIsNotebookOpen(false);
+    setIsProblemOpen(false);
+  }, []);
 
   // 6. TOGGLES DE INSPECCIÓN
   const [toggles, setToggles] = useState<ClassroomToggles>({
@@ -208,6 +295,22 @@ export function Workspace({
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    const isOverlayOpen = isTheoryOpen || isNotebookOpen || isProblemOpen;
+    if (!isOverlayOpen) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsTheoryOpen(false);
+        setIsNotebookOpen(false);
+        setIsProblemOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isTheoryOpen, isNotebookOpen, isProblemOpen]);
 
   // OBSERVADOR DE REDIMENSIONAMIENTO PARA MÁXIMA NITIDEZ (Cero desenfoque al ocultar/mostrar panel o rotar pantalla)
   useEffect(() => {
@@ -284,6 +387,86 @@ export function Workspace({
   const transformedVertices = engineResult.transformedVertices;
   const secondaryTransformedVertices = engineResult.secondaryTransformedVertices || [];
   const translationStages = engineResult.translationStages || [];
+
+  const notebookContext = useMemo(() => {
+    switch (config.type) {
+      case 'translation':
+        return {
+          typeLabel: 'Traslación',
+          summary: `El plano se desplaza según el vector v = (${formatNum(config.dx)}, ${formatNum(config.dy)}).`,
+          formula: `(x', y') = (x + ${formatNum(config.dx)}, y + ${formatNum(config.dy)})`,
+          studentExplanation: 'Cada punto se mueve exactamente la misma cantidad en la misma dirección. La figura conserva su forma, sus lados y sus medidas; lo único que cambia es la posición en el plano.',
+          parameters: [
+            `Vector de desplazamiento: (${formatNum(config.dx)}, ${formatNum(config.dy)})`,
+            `Dirección: ${config.dx >= 0 ? 'hacia la derecha' : 'hacia la izquierda'} y ${config.dy >= 0 ? 'hacia arriba' : 'hacia abajo'}`,
+            'La orientación de la figura no se invierte.'
+          ]
+        };
+      case 'reflection':
+        return {
+          typeLabel: 'Simetría axial',
+          summary: `La figura se refleja respecto a ${config.reflectionAxis === 'x' ? 'el eje X' : config.reflectionAxis === 'y' ? 'el eje Y' : config.reflectionAxis === 'y=x' ? 'la recta y = x' : config.reflectionAxis === 'y=-x' ? 'la recta y = -x' : config.reflectionAxis === 'custom_x' ? `la recta x = ${formatNum(config.customAxisValue)}` : config.reflectionAxis === 'custom_y' ? `la recta y = ${formatNum(config.customAxisValue)}` : `la recta ${formatNum(config.generalLine.a)}x + ${formatNum(config.generalLine.b)}y + ${formatNum(config.generalLine.c)} = 0`}.`,
+          formula: config.reflectionAxis === 'x'
+            ? '(x\', y\') = (x, -y)'
+            : config.reflectionAxis === 'y'
+            ? '(x\', y\') = (-x, y)'
+            : config.reflectionAxis === 'y=x'
+            ? '(x\', y\') = (y, x)'
+            : config.reflectionAxis === 'y=-x'
+            ? '(x\', y\') = (-y, -x)'
+            : config.reflectionAxis === 'custom_x'
+            ? `x' = 2(${formatNum(config.customAxisValue)}) - x,  y' = y`
+            : config.reflectionAxis === 'custom_y'
+            ? `x' = x,  y' = 2(${formatNum(config.customAxisValue)}) - y`
+            : `P' = P - 2·n·[(Ax + By + C)/(A² + B²)]`,
+          studentExplanation: 'La imagen queda en el lado opuesto del eje, a la misma distancia perpendicular. Por eso la figura conserva sus medidas, pero la orientación del giro cambia.',
+          parameters: [
+            `Eje de reflexión: ${config.reflectionAxis === 'x' ? 'y = 0' : config.reflectionAxis === 'y' ? 'x = 0' : config.reflectionAxis === 'y=x' ? 'y = x' : config.reflectionAxis === 'y=-x' ? 'y = -x' : config.reflectionAxis === 'custom_x' ? `x = ${formatNum(config.customAxisValue)}` : config.reflectionAxis === 'custom_y' ? `y = ${formatNum(config.customAxisValue)}` : `Ax + By + C = 0`}`,
+            'La recta de reflexión es la mediatriz del segmento entre cada punto y su imagen.',
+            'Se conservan ángulos, longitudes y área.'
+          ]
+        };
+      case 'rotation':
+        return {
+          typeLabel: 'Rotación',
+          summary: `La figura gira ${Math.abs(config.angleDeg)}° alrededor del centro C(${formatNum(config.center.x)}, ${formatNum(config.center.y)}) en sentido ${config.direction === 'clockwise' ? 'horario' : 'antihorario'}.`,
+          formula: `P' = C + R_α(P - C), con α = ${config.direction === 'clockwise' ? '-' : '+'}${Math.abs(config.angleDeg)}°`,
+          studentExplanation: 'Cada punto describe un arco alrededor del centro. La distancia a ese centro se conserva, pero la posición angular cambia; por eso la figura gira sin deformarse.',
+          parameters: [
+            `Centro: C(${formatNum(config.center.x)}, ${formatNum(config.center.y)})`,
+            `Ángulo: ${Math.abs(config.angleDeg)}°`,
+            `Sentido: ${config.direction === 'clockwise' ? 'horario' : 'antihorario'}`
+          ]
+        };
+      case 'central_reflection':
+        return {
+          typeLabel: 'Simetría central',
+          summary: `Cada punto se refleja respecto al centro O(${formatNum(config.centralCenter.x)}, ${formatNum(config.centralCenter.y)}) como si fuera un giro de 180° alrededor de ese punto.`,
+          formula: `(x', y') = (2h - x, 2k - y) con O(${formatNum(config.centralCenter.x)}, ${formatNum(config.centralCenter.y)})`,
+          studentExplanation: 'El centro es el punto medio entre el punto original y su imagen. La figura conserva tamaño y forma, pero cambia de lado respecto al centro.',
+          parameters: [
+            `Centro: O(${formatNum(config.centralCenter.x)}, ${formatNum(config.centralCenter.y)})`,
+            'Cada segmento queda dividido por el centro en dos partes iguales.',
+            'La orientación de la figura se invierte.'
+          ]
+        };
+      case 'homothety':
+        return {
+          typeLabel: 'Homotecia',
+          summary: `La figura se amplía o reduce desde el centro O(${formatNum(config.homothetyCenter.x)}, ${formatNum(config.homothetyCenter.y)}) con razón k = ${formatNum(config.scaleFactor)}.`,
+          formula: `(x', y') = (${formatNum(config.homothetyCenter.x)} + k(x - ${formatNum(config.homothetyCenter.x)}), ${formatNum(config.homothetyCenter.y)} + k(y - ${formatNum(config.homothetyCenter.y)}))`,
+          studentExplanation: 'Los puntos no solo cambian de lugar, sino que se alejan o acercan al centro según la factor k. Esto cambia las longitudes y el área, pero conserva la forma y los ángulos.',
+          parameters: [
+            `Centro: O(${formatNum(config.homothetyCenter.x)}, ${formatNum(config.homothetyCenter.y)})`,
+            `Razón: k = ${formatNum(config.scaleFactor)}`,
+            config.scaleFactor > 0 ? 'La figura queda del mismo lado del centro.' : 'La figura queda al lado opuesto del centro.'
+          ]
+        };
+      default:
+        return undefined;
+    }
+  }, [config]);
+
   const activeReflectionAxes = config.reflectionAxes?.length
     ? config.reflectionAxes
     : [config.reflectionAxis];
@@ -378,7 +561,7 @@ export function Workspace({
       angleDeg: 90,
       direction: 'anticlockwise',
       center: { x: 0, y: 0 },
-      scaleFactor: 1.5,
+      scaleFactor: 3,
       homothetyCenter: { x: 0, y: 0 }
     });
     setUndoStack([]);
@@ -1759,16 +1942,32 @@ export function Workspace({
     }
 
     // C) DIBUJAR VÉRTICES (Puntos y sus etiquetas anti-colisión)
+    const renderedPointKeys = new Set<string>();
+    const drawVertexMarker = (
+      point: Point,
+      radius: number,
+      fillStyle: string,
+      strokeStyle = '#ffffff',
+      lineWidth = baseLW - 0.2
+    ) => {
+      const pScr = toScreen(point, width, height);
+      const key = `${Math.round(pScr.x * 10)}:${Math.round(pScr.y * 10)}`;
+      if (renderedPointKeys.has(key)) return;
+      renderedPointKeys.add(key);
+
+      ctx.beginPath();
+      ctx.arc(pScr.x, pScr.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+    };
+
     // 1. Vértices de F' (Transformada)
     if (toggles.showPoints) transformedVertices.forEach((pt, i) => {
       const pScr = toScreen(pt, width, height);
-      ctx.beginPath();
-      ctx.arc(pScr.x, pScr.y, pRad - 0.5, 0, Math.PI * 2);
-      ctx.fillStyle = transStroke;
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = baseLW - 0.2;
-      ctx.stroke();
+      drawVertexMarker(pt, pRad - 0.5, transStroke);
 
       if (showLabels && !(config.type === 'reflection' && toggles.showReflectionDistances)) {
         const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
@@ -1788,13 +1987,7 @@ export function Workspace({
 
     if (toggles.showPoints) secondaryTransformedVertices.forEach((pt, i) => {
       const pScr = toScreen(pt, width, height);
-      ctx.beginPath();
-      ctx.arc(pScr.x, pScr.y, pRad - 0.5, 0, Math.PI * 2);
-      ctx.fillStyle = isDarkMode ? '#67e8f9' : '#0f766e';
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = baseLW - 0.2;
-      ctx.stroke();
+      drawVertexMarker(pt, pRad - 0.5, isDarkMode ? '#67e8f9' : '#0f766e');
       if (showLabels && !(config.type === 'reflection' && toggles.showReflectionDistances)) {
         const baseName = vertices[i]?.label || String.fromCharCode(65 + i);
         const labelText = `${baseName}'' (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
@@ -1823,13 +2016,7 @@ export function Workspace({
         ctx.stroke();
       }
 
-      ctx.beginPath();
-      ctx.arc(pScr.x, pScr.y, isHovered || isSegmentSelected ? pRad + 1.5 : pRad, 0, Math.PI * 2);
-      ctx.fillStyle = isHovered ? '#10b981' : isSegmentSelected ? '#2563eb' : (pt.color || preStroke);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      drawVertexMarker(pt, isHovered || isSegmentSelected ? pRad + 1.5 : pRad, isHovered ? '#10b981' : isSegmentSelected ? '#2563eb' : (pt.color || preStroke));
 
       if (showLabels && !(config.type === 'reflection' && toggles.showReflectionDistances)) {
         const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
@@ -2047,17 +2234,9 @@ export function Workspace({
 
       // Las coordenadas se dibujan al final para que ningún riel pueda atravesarlas.
       const drawTopPointLabel = (point: Point, index: number, color: string, suffix = '') => {
-        const screenPoint = toScreen(point, width, height);
-        ctx.beginPath();
-        ctx.arc(screenPoint.x, screenPoint.y, pRad + 0.5, 0, Math.PI * 2);
-        const pointLabelColor = isDarkMode ? '#f8fafc' : '#111827';
-        ctx.fillStyle = pointLabelColor;
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
         if (!showLabels) return;
 
+        const screenPoint = toScreen(point, width, height);
         const baseName = (point.label || String.fromCharCode(65 + index)).replace(/'/g, '');
         const labelText = `${baseName}${suffix} (${formatNum(point.x)}, ${formatNum(point.y)})`;
         ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
@@ -2075,6 +2254,7 @@ export function Workspace({
           const center = { x: (left + right) / 2, y: candidate.y };
           return pointLabelLines.every((line) => pointToSegmentDistance(center, line.start, line.end) > 14) && left >= 4 && right <= width - 4 && candidate.y - 9 >= 4 && candidate.y + 9 <= height - 4;
         }) || labelCandidates[0];
+        const pointLabelColor = isDarkMode ? '#f8fafc' : '#111827';
         ctx.textAlign = labelPosition.align;
         ctx.textBaseline = 'middle';
         ctx.strokeStyle = isDarkMode ? '#0b0f19' : '#ffffff';
@@ -2516,6 +2696,27 @@ export function Workspace({
   // Estado para alertas o notificaciones de proyecto (toast flotante)
   const [projectToast, setProjectToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const HISTORY_LIMIT = 10;
+  const [backups, setBackups] = useState<GeoProjectData[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem('geotransform_backups_v1');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(0);
+
+  useEffect(() => {
+    if (backups.length === 0) {
+      setSelectedHistoryIndex(0);
+      return;
+    }
+    setSelectedHistoryIndex((prev) => Math.min(prev, backups.length - 1));
+  }, [backups.length]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setProjectToast({ message, type });
@@ -2524,8 +2725,365 @@ export function Workspace({
     }, 4500);
   };
 
+  const buildSnapshot = useCallback((title?: string): GeoProjectData => ({
+    appName: 'GeoTransform Pro',
+    version: '1.0',
+    timestamp: Date.now(),
+    title: title || `Copia ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+    vertices,
+    segments,
+    isPolygon,
+    config,
+    gridStyle,
+    scale,
+    pan,
+    customStatement,
+    problemMode
+  }), [vertices, segments, isPolygon, config, gridStyle, scale, pan, customStatement, problemMode]);
+
+  const saveCurrentProjectToHistory = useCallback((title?: string, notify = true) => {
+    const snapshot = buildSnapshot(title || `Copia ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    setBackups((prev) => {
+      const merged = [snapshot, ...prev.filter((item) => item.timestamp !== snapshot.timestamp)].slice(0, HISTORY_LIMIT);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('geotransform_backups_v1', JSON.stringify(merged));
+      }
+      return merged;
+    });
+    if (notify) {
+      showToast('Copia de seguridad guardada localmente.', 'success');
+    }
+  }, [buildSnapshot]);
+
+  const clearProjectHistory = useCallback(() => {
+    setBackups([]);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('geotransform_backups_v1');
+    }
+    showToast('Historial borrado.', 'success');
+  }, [showToast]);
+
+  const removeProjectSnapshot = useCallback((timestamp: number) => {
+    setBackups((prev) => {
+      const next = prev.filter((item) => item.timestamp !== timestamp);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('geotransform_backups_v1', JSON.stringify(next));
+      }
+      return next;
+    });
+    showToast('Copia eliminada del historial.', 'success');
+  }, [showToast]);
+
+  const restoreProjectSnapshot = useCallback((snapshot: GeoProjectData) => {
+    if (Array.isArray(snapshot.vertices)) setVertices(snapshot.vertices);
+    if (Array.isArray(snapshot.segments)) setSegments(snapshot.segments);
+    if (typeof snapshot.isPolygon === 'boolean') setIsPolygon(snapshot.isPolygon);
+    if (snapshot.config) setConfig(snapshot.config);
+    if (snapshot.gridStyle) setGridStyle(snapshot.gridStyle);
+    if (typeof snapshot.scale === 'number') setScale(snapshot.scale);
+    if (snapshot.pan) setPan(snapshot.pan);
+    if (snapshot.customStatement) setCustomStatement(snapshot.customStatement);
+    if (snapshot.problemMode) setProblemMode(snapshot.problemMode);
+    setIsHistoryOpen(false);
+    showToast(`Se restauró la copia "${snapshot.title || 'Sin título'}".`, 'success');
+  }, []);
+
+  const getExportGeometryBounds = useCallback(() => {
+    const width = canvasDimensions.width || 1200;
+    const height = canvasDimensions.height || 700;
+    const rawPoints: Point[] = [
+      ...vertices,
+      ...transformedVertices,
+      ...secondaryTransformedVertices,
+      ...additionalReflectionVertices.flat(),
+      ...(activePivot ? [activePivot] : []),
+      ...segments.flatMap(([from, to]) => [vertices[from], vertices[to]]).filter(Boolean) as Point[]
+    ];
+
+    const construction = engineResult.constructionElements;
+    construction.vectorGuides?.forEach((guide) => rawPoints.push(guide.start, guide.intermediate, guide.end));
+    construction.perpendicularGuides?.forEach((guide) => rawPoints.push(guide.p, guide.footH, guide.pPrime));
+    construction.rotationArcs?.forEach((arc) => rawPoints.push(arc.center, arc.p, arc.pPrime));
+    construction.homothetyRays?.forEach((ray) => rawPoints.push(ray.center, ray.p, ray.pPrime));
+    construction.centralSymmetrySegments?.forEach((segment) => rawPoints.push(segment.center, segment.p, segment.pPrime));
+
+    if (rawPoints.length === 0) {
+      return {
+        width,
+        height,
+        center: { x: 0, y: 0 },
+        minX: -8,
+        maxX: 8,
+        minY: -8,
+        maxY: 8
+      };
+    }
+
+    const xs = rawPoints.map((point) => point.x);
+    const ys = rawPoints.map((point) => point.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const padding = Math.max(4, Math.abs(maxX - minX) * 0.35, Math.abs(maxY - minY) * 0.35, 6);
+
+    return {
+      width,
+      height,
+      center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
+      minX: minX - padding,
+      maxX: maxX + padding,
+      minY: minY - padding,
+      maxY: maxY + padding
+    };
+  }, [activePivot, additionalReflectionVertices, canvasDimensions.height, canvasDimensions.width, engineResult.constructionElements, scale, segments, secondaryTransformedVertices, transformedVertices, vertices]);
+
+  const renderExportScene = useCallback((targetCanvas: HTMLCanvasElement, variant: 'student' | 'teacher' = 'student') => {
+    const ctx = targetCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const bounds = getExportGeometryBounds();
+    const dpr = window.devicePixelRatio || 1;
+    const baseWidth = Math.max(1200, Math.ceil((bounds.maxX - bounds.minX) * scale + 320));
+    const baseHeight = Math.max(820, Math.ceil((bounds.maxY - bounds.minY) * scale + 260));
+    const exportWidth = Math.min(1800, baseWidth);
+    const exportHeight = Math.min(1200, Math.max(baseHeight, Math.round(exportWidth * 0.72)));
+
+    const headerHeight = 110;
+    const leftPanelWidth = 260;
+    const boardX = 336;
+    const boardY = headerHeight + 28;
+    const boardWidth = exportWidth - 392;
+    const boardHeight = exportHeight - headerHeight - 102;
+    const boardInnerX = boardX + 20;
+    const boardInnerY = boardY + 20;
+    const boardInnerWidth = boardWidth - 40;
+    const boardInnerHeight = boardHeight - 40;
+    const originX = boardInnerX + boardInnerWidth / 2;
+    const originY = boardInnerY + boardInnerHeight / 2;
+    const exportTitle = customStatement?.trim() ? customStatement.trim().slice(0, 84) : 'Hoja de trabajo de transformaciones geométricas';
+    const summaryText = config.type === 'reflection'
+      ? 'Reflexiona la figura respecto a un eje y comprueba la congruencia entre puntos y sus imágenes.'
+      : config.type === 'translation'
+        ? 'Traslada la figura según un vector y verifica cómo cambian las coordenadas de cada punto.'
+        : config.type === 'rotation'
+          ? 'Gira la figura alrededor de un centro y analiza el ángulo y la orientación.'
+          : config.type === 'central_reflection'
+            ? 'Aplica una simetría central respecto al centro para estudiar la imagen invertida.'
+            : 'Realiza una homotecia desde un centro y compara el tamaño y la proporción.';
+    const teacherHint = variant === 'teacher'
+      ? 'Orientación docente: señala el eje, centro o vector, identifica la transformación y justifica la congruencia o semejanza.'
+      : 'Resuelve la actividad observando la figura, su imagen y la relación entre los puntos.';
+
+    const toExport = (point: { x: number; y: number }) => ({
+      x: originX + (point.x - bounds.center.x) * scale,
+      y: originY - (point.y - bounds.center.y) * scale
+    });
+
+    const minUnitX = Math.floor((bounds.minX - 2) * 1.5);
+    const maxUnitX = Math.ceil((bounds.maxX + 2) * 1.5);
+    const minUnitY = Math.floor((bounds.minY - 2) * 1.5);
+    const maxUnitY = Math.ceil((bounds.maxY + 2) * 1.5);
+
+    targetCanvas.width = Math.round(exportWidth * dpr);
+    targetCanvas.height = Math.round(exportHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const bgGradient = ctx.createLinearGradient(0, 0, exportWidth, exportHeight);
+    bgGradient.addColorStop(0, isDarkMode ? '#07111d' : '#f5f9ff');
+    bgGradient.addColorStop(1, isDarkMode ? '#111827' : '#edf5ff');
+    ctx.fillStyle = bgGradient;
+    ctx.fillRect(0, 0, exportWidth, exportHeight);
+
+    const headerGradient = ctx.createLinearGradient(0, 0, exportWidth, headerHeight);
+    headerGradient.addColorStop(0, isDarkMode ? '#0f172a' : '#1d4ed8');
+    headerGradient.addColorStop(1, isDarkMode ? '#111827' : '#2563eb');
+    ctx.fillStyle = headerGradient;
+    ctx.fillRect(0, 0, exportWidth, headerHeight);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(0, headerHeight - 1, exportWidth, 1);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 30px "Inter", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('GeoTransform Pro', 54, 58);
+
+    ctx.font = '13px "Inter", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.fillText('Hoja de trabajo • geometría dinámica', 54, 84);
+
+    const badgeX = exportWidth - 220;
+    const badgeY = 32;
+    const badgeWidth = 150;
+    const badgeHeight = 42;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
+    ctx.strokeStyle = 'rgba(255,255,255,0.26)';
+    ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeHeight);
+    ctx.fillStyle = '#dbeafe';
+    ctx.font = 'bold 11px "Inter", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(config.type.toUpperCase(), badgeX + badgeWidth / 2, badgeY + 26);
+
+    ctx.fillStyle = isDarkMode ? 'rgba(15, 23, 42, 0.8)' : 'rgba(255,255,255,0.82)';
+    ctx.fillRect(50, 120, leftPanelWidth, exportHeight - 180);
+    ctx.strokeStyle = isDarkMode ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.35)';
+    ctx.strokeRect(50, 120, leftPanelWidth, exportHeight - 180);
+
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 11px "Inter", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('TÍTULO', 72, 154);
+    ctx.fillStyle = isDarkMode ? '#f8fafc' : '#0f172a';
+    ctx.font = 'bold 26px "Inter", sans-serif';
+    const titleLines = exportTitle.match(/.{1,20}/g) || [exportTitle];
+    titleLines.slice(0, 3).forEach((line, index) => {
+      ctx.fillText(line, 72, 188 + index * 28);
+    });
+
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 11px "Inter", sans-serif';
+    ctx.fillText(variant === 'teacher' ? 'OBJETIVO DOCENTE' : 'OBJETIVO', 72, 290);
+    ctx.fillStyle = isDarkMode ? '#e2e8f0' : '#334155';
+    ctx.font = '13px "Inter", sans-serif';
+    const objectiveText = variant === 'teacher'
+      ? [
+          'Guiar la observación de la figura.',
+          'Relacionar la transformación con sus propiedades.',
+          'Validar la argumentación matemática.'
+        ]
+      : [
+          'Analizar la figura original y su imagen.',
+          'Identificar el tipo de transformación.',
+          'Comprobar propiedades y relaciones.'
+        ];
+    objectiveText.forEach((line, index) => {
+      ctx.fillText(line, 72, 314 + index * 18);
+    });
+
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 11px "Inter", sans-serif';
+    ctx.fillText(variant === 'teacher' ? 'ORIENTACIÓN' : 'DESAFÍO', 72, 390);
+    ctx.fillStyle = isDarkMode ? '#cbd5e1' : '#475569';
+    ctx.font = '13px "Inter", sans-serif';
+    const wrappedSummary = (variant === 'teacher' ? teacherHint : summaryText).match(/.{1,28}/g) || [(variant === 'teacher' ? teacherHint : summaryText)];
+    wrappedSummary.slice(0, 5).forEach((line, index) => {
+      ctx.fillText(line, 72, 414 + index * 18);
+    });
+
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 11px "Inter", sans-serif';
+    ctx.fillText(variant === 'teacher' ? 'EVIDENCIA' : 'COMPLETA', 72, 510);
+    ctx.fillStyle = isDarkMode ? '#f8fafc' : '#0f172a';
+    ctx.fillRect(72, 528, 140, 30);
+    ctx.strokeStyle = isDarkMode ? 'rgba(148, 163, 184, 0.3)' : 'rgba(148,163,184,0.42)';
+    ctx.strokeRect(72, 528, 140, 30);
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 12px "Inter", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(variant === 'teacher' ? 'Guía' : 'Ejercicio', 142, 548);
+    ctx.textAlign = 'left';
+
+    ctx.fillStyle = isDarkMode ? 'rgba(15, 23, 42, 0.82)' : 'rgba(255,255,255,0.82)';
+    ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
+    ctx.strokeStyle = isDarkMode ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.35)';
+    ctx.strokeRect(boardX, boardY, boardWidth, boardHeight);
+
+    ctx.fillStyle = isDarkMode ? 'rgba(15,23,42,0.25)' : 'rgba(37, 99, 235, 0.06)';
+    ctx.fillRect(boardInnerX, boardInnerY, boardInnerWidth, boardInnerHeight);
+
+    ctx.strokeStyle = isDarkMode ? '#1e293b' : '#dfeaf6';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let u = minUnitX; u <= maxUnitX; u++) {
+      const x = originX + u * scale;
+      ctx.moveTo(x, boardInnerY);
+      ctx.lineTo(x, boardInnerY + boardInnerHeight);
+    }
+    for (let u = minUnitY; u <= maxUnitY; u++) {
+      const y = originY - u * scale;
+      ctx.moveTo(boardInnerX, y);
+      ctx.lineTo(boardInnerX + boardInnerWidth, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = isDarkMode ? '#475569' : '#334155';
+    ctx.beginPath();
+    ctx.moveTo(boardInnerX, originY);
+    ctx.lineTo(boardInnerX + boardInnerWidth, originY);
+    ctx.moveTo(originX, boardInnerY);
+    ctx.lineTo(originX, boardInnerY + boardInnerHeight);
+    ctx.stroke();
+
+    const drawPoint = (point: Point, color: string, radius = 5, label?: string) => {
+      const p = toExport(point);
+      ctx.beginPath();
+      ctx.fillStyle = color;
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      if (label) {
+        ctx.font = 'bold 12px "Inter", sans-serif';
+        ctx.fillStyle = isDarkMode ? '#e2e8f0' : '#0f172a';
+        ctx.fillText(label, p.x + 8, p.y - 8);
+      }
+    };
+
+    const renderSegment = (a: Point, b: Point, color: string) => {
+      const start = toExport(a);
+      const end = toExport(b);
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.6;
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+    };
+
+    if (segments.length > 0) {
+      segments.forEach(([from, to]) => {
+        const a = vertices[from];
+        const b = vertices[to];
+        if (a && b) renderSegment(a, b, '#2563eb');
+      });
+    }
+
+    if (vertices.length > 0) {
+      vertices.forEach((point, index) => {
+        drawPoint(point, '#2563eb', 5, point.label || String.fromCharCode(65 + index));
+      });
+    }
+
+    if (transformedVertices.length > 0) {
+      transformedVertices.forEach((point, index) => {
+        drawPoint(point, '#f59e0b', 4, `${point.label || String.fromCharCode(65 + index)}'`);
+      });
+    }
+
+    if (showLabels) {
+      const labelPoints = [...vertices, ...transformedVertices, ...secondaryTransformedVertices];
+      labelPoints.forEach((point) => {
+        const p = toExport(point);
+        ctx.fillStyle = isDarkMode ? '#f8fafc' : '#111827';
+        ctx.font = 'bold 11px "Inter", sans-serif';
+        ctx.fillText(`${point.label || 'P'} (${formatNum(point.x)}, ${formatNum(point.y)})`, p.x + 10, p.y - 10);
+      });
+    }
+
+    const footerX = exportWidth - 360;
+    const footerY = exportHeight - 52;
+    ctx.fillStyle = isDarkMode ? 'rgba(15, 23, 42, 0.84)' : 'rgba(255,255,255,0.82)';
+    ctx.fillRect(footerX, footerY, 290, 26);
+    ctx.strokeStyle = isDarkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(37,99,235,0.24)';
+    ctx.strokeRect(footerX, footerY, 290, 26);
+    ctx.fillStyle = '#3b82f6';
+    ctx.font = 'bold 11px "Inter", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('contenido geométrico localizado automáticamente para exportación', footerX + 145, footerY + 17);
+  }, [config.type, getExportGeometryBounds, isDarkMode, scale, segments, secondaryTransformedVertices, showLabels, transformedVertices, vertices]);
+
   // Exportar PNG de alta resolución con metadatos de proyecto integrados (Smart PNG)
-  const handleExportPNG = async (requestedFileName?: string) => {
+  const handleExportPNG = async (requestedFileName?: string, variant: 'student' | 'teacher' = 'student') => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const safeFileName = (requestedFileName || 'geotransform')
@@ -2535,132 +3093,9 @@ export function Workspace({
       .replace(/\s+/g, '_')
       .slice(0, 100) || 'geotransform';
 
-    const logicalWidth = canvasDimensions.width || canvas.getBoundingClientRect().width;
-    const logicalHeight = canvasDimensions.height || canvas.getBoundingClientRect().height;
     const dpr = window.devicePixelRatio || 1;
-    const geometryPoints: Array<{ x: number; y: number }> = [
-      ...vertices,
-      ...transformedVertices,
-      ...secondaryTransformedVertices,
-      ...additionalReflectionVertices.flat(),
-      ...segments.flatMap(([from, to]) => [vertices[from], vertices[to]]).filter(Boolean)
-    ];
-    const construction = engineResult.constructionElements;
-    construction.vectorGuides?.forEach((guide) => {
-      geometryPoints.push(guide.start, guide.intermediate, guide.end);
-    });
-    construction.perpendicularGuides?.forEach((guide) => {
-      geometryPoints.push(guide.p, guide.footH, guide.pPrime);
-    });
-    construction.rotationArcs?.forEach((arc) => {
-      geometryPoints.push(arc.center, arc.p, arc.pPrime);
-    });
-    construction.homothetyRays?.forEach((ray) => {
-      geometryPoints.push(ray.center, ray.p, ray.pPrime);
-    });
-    construction.centralSymmetrySegments?.forEach((segment) => {
-      geometryPoints.push(segment.center, segment.p, segment.pPrime);
-    });
-    if (activePivot) geometryPoints.push(activePivot);
-
-    const screenPoints = geometryPoints
-      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
-      .map((point) => toScreen(point, logicalWidth, logicalHeight));
-    let bounds = screenPoints.length > 0
-      ? screenPoints.reduce(
-          (current, point) => ({
-            minX: Math.min(current.minX, point.x),
-            minY: Math.min(current.minY, point.y),
-            maxX: Math.max(current.maxX, point.x),
-            maxY: Math.max(current.maxY, point.y)
-          }),
-          { minX: logicalWidth / 2, minY: logicalHeight / 2, maxX: logicalWidth / 2, maxY: logicalHeight / 2 }
-        )
-      : { minX: 0, minY: 0, maxX: logicalWidth, maxY: logicalHeight };
-
-    // Las etiquetas ocupan más espacio que el punto: forman parte del contenido exportable.
-    if (showLabels && screenPoints.length > 0) {
-      const measureCanvas = document.createElement('canvas');
-      const measureCtx = measureCanvas.getContext('2d');
-      if (measureCtx) {
-        measureCtx.font = 'bold 13px "Inter", -apple-system, sans-serif';
-        const labeledPoints = [
-          ...vertices.map((point, index) => ({ point, label: `${(point.label || String.fromCharCode(65 + index)).replace(/'/g, '')} (${formatNum(point.x)}, ${formatNum(point.y)})` })),
-          ...transformedVertices.map((point, index) => ({ point, label: `${(point.label || String.fromCharCode(65 + index)).replace(/'/g, '')}' (${formatNum(point.x)}, ${formatNum(point.y)})` })),
-          ...secondaryTransformedVertices.map((point, index) => ({ point, label: `${(vertices[index]?.label || String.fromCharCode(65 + index))}'' (${formatNum(point.x)}, ${formatNum(point.y)})` })),
-          ...additionalReflectionVertices.flat().map((point, index) => ({ point, label: `${(point.label || String.fromCharCode(65 + index)).replace(/'/g, '')}' (${formatNum(point.x)}, ${formatNum(point.y)})` }))
-        ];
-
-        labeledPoints.forEach(({ point, label }) => {
-          const screenPoint = toScreen(point, logicalWidth, logicalHeight);
-          const labelWidth = measureCtx.measureText(label).width;
-          const horizontalSafety = labelWidth + 18;
-          const verticalSafety = 28;
-          bounds = {
-            minX: Math.min(bounds.minX, screenPoint.x - horizontalSafety),
-            minY: Math.min(bounds.minY, screenPoint.y - verticalSafety),
-            maxX: Math.max(bounds.maxX, screenPoint.x + horizontalSafety),
-            maxY: Math.max(bounds.maxY, screenPoint.y + verticalSafety)
-          };
-        });
-
-        construction.vectorGuides?.forEach((guide) => {
-          const start = toScreen(guide.start, logicalWidth, logicalHeight);
-          const end = toScreen(guide.end, logicalWidth, logicalHeight);
-          const labelWidth = measureCtx.measureText(`v̅ = (${formatNum(guide.dx)}, ${formatNum(guide.dy)})`).width;
-          const midpointX = (start.x + end.x) / 2;
-          const midpointY = (start.y + end.y) / 2 - 12;
-          bounds = {
-            minX: Math.min(bounds.minX, midpointX - labelWidth / 2 - 10),
-            minY: Math.min(bounds.minY, midpointY - 14),
-            maxX: Math.max(bounds.maxX, midpointX + labelWidth / 2 + 10),
-            maxY: Math.max(bounds.maxY, midpointY + 14)
-          };
-        });
-      }
-    }
-
-    const exportPadding = 40;
-    const minimumExportWidth = Math.min(logicalWidth, 420);
-    const minimumExportHeight = Math.min(logicalHeight, 300);
-    const contentWidth = bounds.maxX - bounds.minX + exportPadding * 2;
-    const contentHeight = bounds.maxY - bounds.minY + exportPadding * 2;
-    const cropWidth = Math.min(logicalWidth, Math.max(minimumExportWidth, contentWidth));
-    const cropHeight = Math.min(logicalHeight, Math.max(minimumExportHeight, contentHeight));
-    const centerX = (bounds.minX + bounds.maxX) / 2;
-    const centerY = (bounds.minY + bounds.maxY) / 2;
-    const cropLeft = Math.max(0, Math.min(logicalWidth - cropWidth, centerX - cropWidth / 2));
-    const cropTop = Math.max(0, Math.min(logicalHeight - cropHeight, centerY - cropHeight / 2));
-    const headerHeight = 48;
-
     const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = Math.round(cropWidth * dpr);
-    exportCanvas.height = Math.round((cropHeight + headerHeight) * dpr);
-    const ctx = exportCanvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = isDarkMode ? '#0b0f19' : '#ffffff';
-    ctx.fillRect(0, 0, cropWidth, cropHeight + headerHeight);
-    ctx.drawImage(
-      canvas,
-      Math.round(cropLeft * dpr),
-      Math.round(cropTop * dpr),
-      Math.round(cropWidth * dpr),
-      Math.round(cropHeight * dpr),
-      0,
-      headerHeight,
-      cropWidth,
-      cropHeight
-    );
-
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.fillRect(0, 0, cropWidth, headerHeight);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 15px "Inter", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('GeoTransform Pro • Laboratorio de Geometría Dinámica', 20, 30);
+    renderExportScene(exportCanvas, variant);
 
     const projectData: GeoProjectData = {
       appName: 'GeoTransform Pro',
@@ -2683,16 +3118,16 @@ export function Workspace({
         const smartBlob = await embedProjectInPNG(blob, projectData);
         const url = URL.createObjectURL(smartBlob);
         const link = document.createElement('a');
-        link.download = `${safeFileName}.png`;
+        link.download = `${safeFileName}_${variant}.png`;
         link.href = url;
         link.click();
         URL.revokeObjectURL(url);
-        showToast('¡Imagen PNG guardada con proyecto editable integrado!', 'success');
+        showToast(`¡Imagen PNG guardada en versión ${variant === 'teacher' ? 'profesor' : 'alumno'}!`, 'success');
       } catch (err) {
         console.error(err);
         const dataUrl = exportCanvas.toDataURL('image/png');
         const link = document.createElement('a');
-        link.download = `${safeFileName}.png`;
+        link.download = `${safeFileName}_${variant}.png`;
         link.href = dataUrl;
         link.click();
       }
@@ -2776,34 +3211,18 @@ export function Workspace({
   };
 
   // Exportar PDF
-  const handleExportPDF = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
+  const handleExportPDF = (variant: 'student' | 'teacher' = 'student') => {
     const exportCanvas = document.createElement('canvas');
-    exportCanvas.width = canvas.width;
-    exportCanvas.height = canvas.height;
-    const ctx = exportCanvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.drawImage(canvas, 0, 0);
-
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.fillRect(0, 0, exportCanvas.width, 50);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 15px "Inter", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('GeoTransform Pro • Laboratorio de Geometría Dinámica', 20, 30);
-
+    renderExportScene(exportCanvas, variant);
     const dataUrl = exportCanvas.toDataURL('image/png');
     const pdf = new jsPDF({
-      orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+      orientation: exportCanvas.width > exportCanvas.height ? 'landscape' : 'portrait',
       unit: 'px',
-      format: [canvas.width, canvas.height]
+      format: [exportCanvas.width, exportCanvas.height]
     });
-    pdf.addImage(dataUrl, 'PNG', 0, 0, canvas.width, canvas.height);
-    pdf.save(`geotransform_${config.type}_${Date.now()}.pdf`);
+    pdf.addImage(dataUrl, 'PNG', 0, 0, exportCanvas.width, exportCanvas.height);
+    pdf.save(`geotransform_${variant}_${config.type}_${Date.now()}.pdf`);
+    showToast(`¡PDF guardado en versión ${variant === 'teacher' ? 'profesor' : 'alumno'}!`, 'success');
   };
 
   return (
@@ -2866,6 +3285,17 @@ export function Workspace({
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         sidebarTab={sidebarTab}
         onSelectSidebarTab={setSidebarTab}
+        onOpenNotebook={() => {
+          setIsNotebookOpen(true);
+          setIsSidebarOpen(false);
+        }}
+        onOpenProblem={() => {
+          setSelectedProblemTab(currentScenario ? 'ejercicio' : 'selector');
+          setIsProblemOpen(true);
+          setIsSidebarOpen(false);
+        }}
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        onSaveHistory={() => saveCurrentProjectToHistory(`Guardado manual ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, true)}
         onOpenTheory={() => setIsTheoryOpen(true)}
         isDarkMode={isDarkMode}
         onToggleDarkMode={() => setSettings(prev => ({ ...prev, isDarkMode: !prev.isDarkMode }))}
@@ -3066,17 +3496,6 @@ export function Workspace({
             </button>
           </div>
 
-          {/* BOTÓN FLOTANTE PARA ABRIR PANEL CUANDO ESTÁ OCULTO */}
-          {!isSidebarOpen && (
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              title="Abrir panel de configuración"
-              className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-surface/90 border border-border shadow-lg backdrop-blur-md text-xs font-bold text-ink hover:text-accent hover:border-accent transition group animate-in fade-in cursor-pointer"
-            >
-              <PanelRightOpen className="h-4 w-4 text-accent group-hover:scale-110 transition shrink-0" />
-              <span>Configuración</span>
-            </button>
-          )}
         </div>
 
         {/* BACKDROP PARA MÓVIL Y TABLETA */}
@@ -3090,98 +3509,107 @@ export function Workspace({
 
         {/* PANEL LATERAL RESPONSIVO (DRAWER EN MÓVIL/TABLETA, ASIDE LATERAL EN DESKTOP) */}
         {isSidebarOpen && (
-          <aside className="fixed inset-y-0 right-0 z-50 h-full max-h-full w-[88vw] max-w-[360px] sm:w-[380px] md:relative md:inset-y-auto md:right-auto md:h-auto md:max-h-full md:w-[380px] md:shrink-0 min-h-0 flex flex-col overflow-hidden bg-surface border-l border-border shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
-            {/* Cabecera del panel con pestañas internas y botones Guardar / Cerrar */}
-            <div className="flex items-center justify-between px-2.5 py-2 border-b border-border bg-panel/80 shrink-0 gap-2">
-              <div className="flex items-center gap-0.5 bg-surface p-0.5 rounded-xl border border-border shrink-0">
+          <aside className="fixed inset-y-0 right-0 z-50 h-full max-h-full w-[88vw] max-w-[360px] sm:w-[380px] md:relative md:inset-y-auto md:right-auto md:h-auto md:max-h-full md:w-[380px] md:shrink-0 min-h-0 flex flex-col overflow-hidden border-l border-border bg-gradient-to-b from-surface via-surface to-panel shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200 md:rounded-l-3xl md:border-r md:border-border">
+            {/* Cabecera del panel con identidad didáctica y visual clara */}
+            <div className="relative shrink-0 border-b border-border bg-gradient-to-r from-accent/12 via-panel to-surface/95 px-2.5 py-2.5">
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/10 text-accent shadow-sm ring-1 ring-accent/20">
+                    <Sliders className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-accent">Panel</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-soft">de trabajo</span>
+                    </div>
+                    <div className="truncate text-sm font-bold text-ink">Configuración didáctica</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => {
+                      setIsSidebarOpen(false);
+                      showToast('Configuración guardada y aplicada al plano', 'success');
+                    }}
+                    title="Guardar y volver al plano cartesiano"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent/90 shadow-sm transition active:scale-95 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Guardar</span>
+                  </button>
+                  <button
+                    onClick={() => setIsSidebarOpen(false)}
+                    title="Cerrar panel"
+                    className="p-1.5 rounded-xl text-ink-soft hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 transition"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-3 pt-3 pb-2 border-b border-border bg-surface/80">
+              <div className="flex items-center rounded-xl border border-border bg-panel p-1 gap-1 shadow-sm">
                 <button
-                  onClick={() => setSidebarTab('algebra')}
-                  className={`px-2 py-1 text-xs font-bold rounded-lg transition ${
-                    sidebarTab === 'algebra' ? 'bg-panel text-accent shadow-xs' : 'text-ink-soft hover:text-ink'
-                  }`}
+                  className="flex-1 rounded-lg bg-accent/10 text-accent px-2 py-1.5 text-[11px] font-bold shadow-sm ring-1 ring-accent/15"
+                  type="button"
                 >
                   Álgebra
                 </button>
                 <button
-                  onClick={() => setSidebarTab('notebook')}
-                  className={`px-2 py-1 text-xs font-bold rounded-lg transition ${
-                    sidebarTab === 'notebook' ? 'bg-panel text-accent shadow-xs' : 'text-ink-soft hover:text-ink'
-                  }`}
+                  className="flex-1 rounded-lg text-ink-soft hover:text-ink px-2 py-1.5 text-[11px] font-semibold transition"
+                  type="button"
+                  onClick={() => setIsSidebarOpen(false)}
                 >
-                  Cuaderno
-                </button>
-                <button
-                  onClick={() => setSidebarTab('problem')}
-                  className={`px-2 py-1 text-xs font-bold rounded-lg transition ${
-                    sidebarTab === 'problem' ? 'bg-panel text-emerald-700 dark:text-emerald-400 shadow-xs' : 'text-ink-soft hover:text-ink'
-                  }`}
-                >
-                  Problemas
+                  Pizarra
                 </button>
               </div>
 
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => {
-                    setIsSidebarOpen(false);
-                    showToast('Configuración guardada y aplicada al plano', 'success');
-                  }}
-                  title="Guardar y volver al plano cartesiano"
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-white bg-accent hover:bg-accent/90 shadow-sm transition active:scale-95 cursor-pointer"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>Guardar</span>
-                </button>
-                <button
-                  onClick={() => setIsSidebarOpen(false)}
-                  title="Cerrar panel"
-                  className="p-1.5 rounded-xl text-ink-soft hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 transition"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+              <div className="mt-3 rounded-2xl border border-accent/20 bg-gradient-to-r from-accent/8 to-sky-500/5 p-2.5 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-accent">Trabajo activo</div>
+                    <div className="mt-1 text-xs font-semibold text-ink">Transformación del plano</div>
+                  </div>
+                  <span className="rounded-full border border-accent/20 bg-white/70 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-accent dark:bg-slate-900/60">
+                    {config.type}
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] text-ink-soft">
+                  Ajusta la preimagen y observa cómo cambia la figura en la pizarra.
+                </p>
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-              {sidebarTab === 'algebra' && (
-                <AlgebraView
-                  vertices={vertices}
-                  onUpdateVertices={setVertices}
-                  segments={segments}
-                  onUpdateSegments={setSegments}
-                  isPolygon={isPolygon}
-                  onTogglePolygon={handleTogglePolygon}
-                  onAutoConnectSegments={handleAutoConnectSegments}
-                  onClearSegments={handleClearSegments}
-                  transformedVertices={transformedVertices}
-                  config={config}
-                  onUpdateConfig={setConfig}
-                  onSetTool={setTool}
-                  onOpenCoordsModal={() => setIsCoordsModalOpen(true)}
-                  toggles={toggles}
-                  onUpdateToggles={setToggles}
-                  showLabels={showLabels}
-                  onToggleLabels={() => setSettings(prev => ({ ...prev, showLabels: !prev.showLabels }))}
-                />
-              )}
-
-              {sidebarTab === 'notebook' && (
-                <AlgebraicNotebook engineResult={engineResult} />
-              )}
-
-              {sidebarTab === 'problem' && (
-                <InverseProblemPanel
-                  preimage={vertices}
-                  image={transformedVertices}
-                  currentScenario={currentScenario}
-                />
-              )}
+              <AlgebraView
+                vertices={vertices}
+                onUpdateVertices={setVertices}
+                segments={segments}
+                onUpdateSegments={setSegments}
+                isPolygon={isPolygon}
+                onTogglePolygon={handleTogglePolygon}
+                onAutoConnectSegments={handleAutoConnectSegments}
+                onClearSegments={handleClearSegments}
+                transformedVertices={transformedVertices}
+                config={config}
+                onUpdateConfig={setConfig}
+                onSetTool={setTool}
+                onOpenCoordsModal={() => setIsCoordsModalOpen(true)}
+                toggles={toggles}
+                onUpdateToggles={setToggles}
+                showLabels={showLabels}
+                onToggleLabels={() => setSettings(prev => ({ ...prev, showLabels: !prev.showLabels }))}
+              />
             </div>
 
             {/* BARRA INFERIOR DE ACCIÓN (STICKY): GUARDAR Y VER PLANO */}
             <div className="p-3 border-t border-border bg-surface/95 backdrop-blur-sm shrink-0 flex items-center gap-2 shadow-lg">
               <button
                 onClick={() => {
+                  saveCurrentProjectToHistory(`Guardado y ver plano ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, true);
                   setIsSidebarOpen(false);
                   showToast('Configuración guardada y aplicada al plano', 'success');
                 }}
@@ -3354,12 +3782,510 @@ export function Workspace({
         onLoadExample={handleLoadQuickTriangle}
       />
 
+      {/* MODAL DE HISTORIAL / COPIAS DE SEGURIDAD */}
+      {isHistoryOpen && (() => {
+        const selectedBackup = backups[selectedHistoryIndex] ?? null;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-100">
+            <div className="w-full max-w-lg rounded-3xl bg-surface p-5 shadow-2xl border border-border">
+              <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-ink flex items-center gap-2">
+                    <History className="h-4 w-4 text-accent" /> Historial de copias
+                  </h3>
+                  <p className="text-xs text-ink-soft mt-1">Navega por los momentos guardados y restaura el que necesites.</p>
+                </div>
+                <button
+                  onClick={() => setIsHistoryOpen(false)}
+                  className="p-1.5 rounded-xl hover:bg-black/5"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {backups.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border bg-panel p-4 text-sm text-ink-soft text-center">
+                  Todavía no hay copias locales. El sistema guarda automáticamente cada cambio importante.
+                </div>
+              ) : (
+                <>
+                  <div className="mb-3 flex items-center justify-between gap-2 rounded-2xl border border-border bg-panel p-2">
+                    <button
+                      onClick={() => setSelectedHistoryIndex((prev) => Math.max(0, prev - 1))}
+                      className="flex-1 rounded-xl border border-border bg-surface px-2 py-2 text-[11px] font-bold text-ink hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={selectedHistoryIndex === 0}
+                    >
+                      Anterior
+                    </button>
+                    <div className="px-3 text-[11px] font-bold text-ink-soft">
+                      {selectedHistoryIndex + 1} / {backups.length}
+                    </div>
+                    <button
+                      onClick={() => setSelectedHistoryIndex((prev) => Math.min(backups.length - 1, prev + 1))}
+                      className="flex-1 rounded-xl border border-border bg-surface px-2 py-2 text-[11px] font-bold text-ink hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={selectedHistoryIndex >= backups.length - 1}
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+
+                  <div className="rounded-2xl border border-border bg-panel p-3">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="rounded-full bg-accent/10 text-accent px-2 py-1 text-[10px] font-bold">
+                        {selectedHistoryIndex === 0 ? 'Última' : `Copia ${selectedHistoryIndex + 1}`}
+                      </span>
+                      <button
+                        onClick={() => removeProjectSnapshot(selectedBackup.timestamp)}
+                        className="rounded-xl border border-rose-200 bg-rose-50 p-2 text-rose-600 hover:bg-rose-100 transition"
+                        aria-label={`Eliminar copia ${selectedBackup.title || 'sin título'}`}
+                        title="Eliminar esta copia del historial"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div>
+                        <div className="text-xs text-ink-soft uppercase tracking-wider">Nombre</div>
+                        <div className="text-sm font-bold text-ink">{selectedBackup.title || 'Copia sin título'}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-ink-soft uppercase tracking-wider">Fecha</div>
+                        <div className="text-xs text-ink-soft">
+                          {new Date(selectedBackup.timestamp).toLocaleString('es-ES', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] text-ink-soft">
+                        <div className="rounded-xl bg-surface px-2 py-1.5">
+                          <span className="block text-[10px] uppercase tracking-wide">Vértices</span>
+                          <span className="font-bold text-ink">{selectedBackup.vertices?.length ?? 0}</span>
+                        </div>
+                        <div className="rounded-xl bg-surface px-2 py-1.5">
+                          <span className="block text-[10px] uppercase tracking-wide">Segmentos</span>
+                          <span className="font-bold text-ink">{selectedBackup.segments?.length ?? 0}</span>
+                        </div>
+                        <div className="rounded-xl bg-surface px-2 py-1.5">
+                          <span className="block text-[10px] uppercase tracking-wide">Tipo</span>
+                          <span className="font-bold text-ink capitalize">{selectedBackup.config?.type || '—'}</span>
+                        </div>
+                        <div className="rounded-xl bg-surface px-2 py-1.5">
+                          <span className="block text-[10px] uppercase tracking-wide">Escala</span>
+                          <span className="font-bold text-ink">{selectedBackup.scale ?? '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="mt-4 flex flex-col gap-2">
+                <div className="flex justify-between gap-2">
+                  <button
+                    onClick={() => {
+                      if (selectedBackup) {
+                        restoreProjectSnapshot(selectedBackup);
+                        setIsHistoryOpen(false);
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 rounded-2xl bg-accent text-white text-xs font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={!selectedBackup}
+                  >
+                    Restaurar este momento
+                  </button>
+                  <button
+                    onClick={() => setIsHistoryOpen(false)}
+                    className="px-4 py-2 rounded-2xl border border-border text-xs font-medium hover:bg-black/5"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <button
+                    onClick={() => {
+                      saveCurrentProjectToHistory('Copia manual', true);
+                      setSelectedHistoryIndex(0);
+                      setIsHistoryOpen(false);
+                    }}
+                    className="flex-1 px-4 py-2 rounded-2xl bg-accent/10 text-accent text-xs font-bold hover:bg-accent/20"
+                  >
+                    Guardar ahora
+                  </button>
+                  {backups.length > 0 && (
+                    <button
+                      onClick={() => {
+                        clearProjectHistory();
+                        setSelectedHistoryIndex(0);
+                        setIsHistoryOpen(false);
+                      }}
+                      className="flex-1 px-4 py-2 rounded-2xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100"
+                    >
+                      Borrar historial ({backups.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* PÁGINA COMPLETA DE TEORÍA */}
       {isTheoryOpen && (
         <TheoryPage
           initialTransformation={config.type}
           onClose={() => setIsTheoryOpen(false)}
         />
+      )}
+
+      {/* PÁGINA COMPLETA DE CUADERNO */}
+      {isNotebookOpen && (
+        <div className="fixed inset-0 z-50 bg-surface/95 backdrop-blur-sm overflow-hidden animate-in fade-in duration-150">
+          <div
+            className="h-full w-full flex flex-col"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Cuaderno de trabajo"
+          >
+            <div className="flex items-center justify-between border-b border-border bg-panel/90 px-4 py-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-accent" />
+                <span className="text-sm font-bold text-ink">Cuaderno</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsNotebookOpen(false)}
+                  className="flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/10 px-3 py-1.5 text-[11px] font-bold text-accent shadow-sm hover:bg-accent/15 transition"
+                >
+                  <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                  Volver a la pizarra
+                </button>
+                <button
+                  onClick={() => setIsNotebookOpen(false)}
+                  className="p-2 rounded-xl hover:bg-black/5"
+                  aria-label="Cerrar cuaderno"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0">
+              <AlgebraicNotebook
+                engineResult={engineResult}
+                boardContext={notebookContext}
+                onClose={() => setIsNotebookOpen(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PÁGINA COMPLETA DE PROBLEMAS */}
+      {isProblemOpen && (
+        <div className="fixed inset-0 z-50 bg-surface/95 backdrop-blur-sm overflow-hidden animate-in fade-in duration-150">
+          <div
+            className="h-full w-full flex flex-col"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Problemas de transformación"
+          >
+            <div className="flex items-center justify-between border-b border-border bg-panel/90 px-4 py-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-emerald-600" />
+                <span className="text-sm font-bold text-ink">Problemas</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedProblemTab === 'ejercicio' && (
+                  <button
+                    onClick={() => setSelectedProblemTab('selector')}
+                    className="flex items-center gap-1.5 rounded-xl border-2 border-emerald-300 bg-emerald-50 px-3.5 py-2 text-[11px] font-black text-emerald-800 shadow-sm hover:bg-emerald-100 transition"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                    Volver a la lista
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsProblemOpen(false)}
+                  className="flex items-center gap-1.5 rounded-xl border-2 border-slate-300 bg-slate-900 px-3.5 py-2 text-[11px] font-black text-white shadow-sm hover:bg-slate-700 transition"
+                >
+                  <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                  Volver a la pizarra
+                </button>
+                <button
+                  onClick={() => setIsProblemOpen(false)}
+                  className="p-2 rounded-xl hover:bg-black/5"
+                  aria-label="Cerrar problemas"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {selectedProblemTab === 'selector' && (
+              <div className="flex items-center justify-between border-b border-border bg-emerald-50/60 px-4 py-2.5 text-xs text-emerald-800">
+                <span className="font-bold uppercase tracking-wide">Ruta de estudio</span>
+                <span className="text-[10px] font-semibold">Pizarra activa · {problemMode === 'DIRECT' ? 'Problema directo' : 'Problema inverso'}</span>
+              </div>
+            )}
+
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {selectedProblemTab === 'selector' ? (
+                <div className="p-4 space-y-4">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Selecciona una ruta de estudio</p>
+                    <p className="mt-1 text-[11px] text-emerald-700 leading-relaxed">
+                      Elige entre nivel básico, intermedio o avanzado para practicar la transformación en contexto.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-3 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Ruta de estudio</p>
+                        <p className="mt-1 text-sm font-black text-emerald-900">
+                          {studyMode === 'ruta' ? selectedProblemDifficulty : 'Repaso libre'}
+                        </p>
+                      </div>
+                      <div className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-black text-emerald-700">
+                        {completedProblemIds.length}/{CLASSROOM_PROBLEMS.length}
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-emerald-100">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                        style={{ width: `${Math.min(100, (completedProblemIds.length / Math.max(CLASSROOM_PROBLEMS.length, 1)) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wide">
+                      {levelOrder.map((level) => (
+                        <span
+                          key={level}
+                          className={`rounded-full border px-2 py-1 ${
+                            unlockedLevels[level]
+                              ? 'border-emerald-400 bg-emerald-100 text-emerald-800'
+                              : 'border-slate-200 bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {level} {unlockedLevels[level] ? '· disponible' : '· bloqueado'}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-emerald-700">
+                      {nextStudySuggestion}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-200 bg-white p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Modo de práctica</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(['ruta', 'libre'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setStudyMode(mode)}
+                          className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
+                            studyMode === mode
+                              ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                              : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          }`}
+                        >
+                          {mode === 'ruta' ? 'Ruta guiada' : 'Repaso libre'}
+                        </button>
+                      ))}
+                    </div>
+                    {studyMode === 'ruta' ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {(['básico', 'intermedio', 'avanzado'] as const).map((difficulty) => {
+                          const isLocked = !unlockedLevels[difficulty];
+                          return (
+                            <button
+                              key={difficulty}
+                              disabled={isLocked}
+                              onClick={() => setSelectedProblemDifficulty(difficulty)}
+                              className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
+                                selectedProblemDifficulty === difficulty
+                                  ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                                  : isLocked
+                                    ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                              }`}
+                            >
+                              {difficulty}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setSelectedProblemType('todos')}
+                          className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
+                            selectedProblemType === 'todos'
+                              ? 'border-violet-500 bg-violet-500 text-white shadow-sm'
+                              : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                          }`}
+                        >
+                          Todos
+                        </button>
+                        {(['translation', 'reflection', 'rotation', 'central_reflection', 'homothety'] as const).map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => setSelectedProblemType(type)}
+                            className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
+                              selectedProblemType === type
+                                ? 'border-violet-500 bg-violet-500 text-white shadow-sm'
+                                : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                            }`}
+                          >
+                            {type === 'translation' ? 'Traslación' : type === 'reflection' ? 'Reflexión' : type === 'rotation' ? 'Rotación' : type === 'central_reflection' ? 'Simetría central' : 'Homotecia'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(['todos', 'translation', 'reflection', 'rotation', 'central_reflection', 'homothety'] as const).map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => setSelectedProblemType(type)}
+                          className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
+                            selectedProblemType === type
+                              ? 'border-violet-500 bg-violet-500 text-white shadow-sm'
+                              : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                          }`}
+                        >
+                          {type === 'todos' ? 'Todos' : type === 'translation' ? 'Traslación' : type === 'reflection' ? 'Reflexión' : type === 'rotation' ? 'Rotación' : type === 'central_reflection' ? 'Simetría central' : 'Homotecia'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => setIsProblemOpen(false)}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-slate-300 bg-slate-900 px-4 py-2.5 text-sm font-black text-white shadow-lg hover:bg-slate-700 transition"
+                    >
+                      <ChevronRight className="h-4 w-4 rotate-180" />
+                      Volver a la pizarra
+                    </button>
+                    <button
+                      onClick={() => handleGenerateRandomProblem(selectedProblemDifficulty)}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800 shadow-sm hover:bg-emerald-100 transition"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      Generar problema aleatorio
+                    </button>
+                  </div>
+
+                  {(['básico', 'intermedio', 'avanzado'] as const).map((difficulty) => {
+                    const problems = filteredProblemsByDifficulty[difficulty];
+                    const isLocked = !unlockedLevels[difficulty];
+
+                    return (
+                      <div key={difficulty} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-bold uppercase tracking-wide ${isLocked ? 'text-slate-400' : 'text-ink-soft'}`}>
+                            {difficulty}
+                          </span>
+                          <span className="text-[10px] text-ink-faint">{isLocked ? 'bloqueado' : `${problems.length} retos`}</span>
+                        </div>
+                        <div className="grid gap-2">
+                          {isLocked ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-500">
+                              Completa primero los ejercicios del nivel anterior para desbloquear este reto.
+                            </div>
+                          ) : problems.length === 0 ? (
+                            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-3 text-[11px] text-emerald-700">
+                              No hay ejercicios de este nivel con el tipo de transformación actual.
+                            </div>
+                          ) : (
+                            problems.map((prob) => {
+                              const isCompleted = completedProblemIds.includes(prob.id);
+                              return (
+                                <button
+                                  key={prob.id}
+                                  onClick={() => openScenario(prob)}
+                                  className="w-full text-left rounded-2xl border border-border bg-panel p-3 hover:border-emerald-400 hover:bg-emerald-50/50 transition"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-sm font-bold text-ink">{prob.title}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                                      isCompleted ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-50 text-emerald-700'
+                                    }`}>{isCompleted ? 'resuelto' : prob.category}</span>
+                                  </div>
+                                  <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">{prob.statement}</p>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-4">
+                  <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide font-bold text-emerald-800">Ejercicio activo</p>
+                        <p className="text-sm font-bold text-emerald-900">{currentScenario?.title || 'Problema sin título'}</p>
+                      </div>
+                      <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                        {currentScenario?.difficulty || 'general'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setSelectedProblemTab('selector')}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800 shadow-sm hover:bg-emerald-100 transition"
+                    >
+                      <ChevronRight className="h-4 w-4 rotate-180" />
+                      Volver a la lista
+                    </button>
+                    <button
+                      onClick={markCurrentProblemAsCompleted}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800 shadow-sm hover:bg-emerald-100 transition"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Marcar como resuelto
+                    </button>
+                    <button
+                      onClick={() => handleGenerateRandomProblem(studyMode === 'ruta' ? selectedProblemDifficulty : 'todos')}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-black text-violet-800 shadow-sm hover:bg-violet-100 transition"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      Otro problema
+                    </button>
+                    <button
+                      onClick={() => setIsProblemOpen(false)}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-slate-300 bg-slate-900 px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-slate-700 transition"
+                    >
+                      <ChevronRight className="h-4 w-4 rotate-180" />
+                      Volver a la pizarra
+                    </button>
+                  </div>
+                  {currentScenario && (
+                    <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-800">
+                      <span className="font-black uppercase tracking-wide">Progreso:</span>{' '}
+                      {completedProblemIds.includes(currentScenario.id) ? 'Este ejercicio ya está resuelto y desbloquea el siguiente nivel.' : 'Completa este ejercicio para avanzar al siguiente nivel.'}
+                    </div>
+                  )}
+                  <InverseProblemPanel
+                    preimage={vertices}
+                    image={transformedVertices}
+                    currentScenario={currentScenario}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* NOTIFICACIÓN TOAST FLOTANTE AL CARGAR O GUARDAR PROYECTO */}

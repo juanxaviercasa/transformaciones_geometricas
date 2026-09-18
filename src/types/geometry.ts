@@ -160,10 +160,13 @@ export interface ProblemEngineResult {
   };
 }
 
+export type ProblemDifficulty = 'básico' | 'intermedio' | 'avanzado';
+
 export interface ProblemScenario {
   id: string;
   mode: ProblemMode;
   category: string;
+  difficulty?: ProblemDifficulty;
   title: string;
   statement: string;
   presetVertices: Point[];

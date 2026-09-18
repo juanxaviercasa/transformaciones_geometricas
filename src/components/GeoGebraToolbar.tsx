@@ -14,6 +14,7 @@ import {
   BookOpen,
   FileText,
   HelpCircle,
+  History,
   ChevronDown,
   Target,
   Sun,
@@ -44,13 +45,17 @@ interface GeoGebraToolbarProps {
   onToggleSidebar: () => void;
   sidebarTab: 'algebra' | 'notebook' | 'problem';
   onSelectSidebarTab: (tab: 'algebra' | 'notebook' | 'problem') => void;
+  onOpenNotebook: () => void;
+  onOpenProblem: () => void;
   onOpenTheory: () => void;
+  onOpenHistory: () => void;
+  onSaveHistory: () => void;
   onOpenGuide: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   onToggleFullscreen: () => void;
-  onExportPNG?: (fileName?: string) => void;
-  onExportPDF?: () => void;
+  onExportPNG?: (fileName?: string, variant?: 'student' | 'teacher') => void;
+  onExportPDF?: (variant?: 'student' | 'teacher') => void;
   onExportProjectJSON?: () => void;
   onLoadProject?: (file: File) => void;
 }
@@ -70,7 +75,11 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
   onToggleSidebar,
   sidebarTab,
   onSelectSidebarTab,
+  onOpenNotebook,
+  onOpenProblem,
   onOpenTheory,
+  onOpenHistory,
+  onSaveHistory,
   onOpenGuide,
   isDarkMode,
   onToggleDarkMode,
@@ -264,53 +273,28 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           <BrandLogo compact className="flex sm:hidden" />
         </div>
 
-        {/* CENTRO: SELECTOR DE VISTAS (ÁLGEBRA / CUADERNO / PROBLEMAS) EN PANTALLAS MD Y SUPERIORES */}
+        {/* CENTRO: NAVEGACIÓN DE PRÁCTICA Y APOYO EN LA PARTE SUPERIOR */}
         <div className="hidden md:flex items-center rounded-xl bg-panel p-0.5 border border-border shrink-0 shadow-xs">
           <button
-            onClick={() => {
-              if (isSidebarOpen && sidebarTab === 'algebra') {
-                onToggleSidebar();
-              } else {
-                onSelectSidebarTab('algebra');
-                if (!isSidebarOpen) onToggleSidebar();
-              }
-            }}
-            title={isSidebarOpen && sidebarTab === 'algebra' ? 'Clic para ocultar panel' : 'Ver Álgebra'}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
-              isSidebarOpen && sidebarTab === 'algebra'
-                ? 'bg-surface text-accent shadow-xs'
-                : 'text-ink-soft hover:text-ink'
-            }`}
-          >
-            Álgebra
-          </button>
-          <button
-            onClick={() => {
-              onSelectSidebarTab('notebook');
-              if (!isSidebarOpen) onToggleSidebar();
-            }}
-            title={isSidebarOpen && sidebarTab === 'notebook' ? 'Clic para ocultar panel' : 'Ver Cuaderno'}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
-              isSidebarOpen && sidebarTab === 'notebook'
-                ? 'bg-surface text-accent shadow-xs'
-                : 'text-ink-soft hover:text-ink'
-            }`}
+            onClick={onOpenNotebook}
+            title="Abrir cuaderno completo"
+            className="px-3 py-1 text-xs font-bold rounded-lg text-ink-soft hover:text-ink transition"
           >
             Cuaderno
           </button>
           <button
-            onClick={() => {
-              onSelectSidebarTab('problem');
-              if (!isSidebarOpen) onToggleSidebar();
-            }}
-            title={isSidebarOpen && sidebarTab === 'problem' ? 'Clic para ocultar panel' : 'Ver Problemas Inversos'}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
-              isSidebarOpen && sidebarTab === 'problem'
-                ? 'bg-surface text-emerald-700 dark:text-emerald-400 shadow-xs'
-                : 'text-ink-soft hover:text-ink'
-            }`}
+            onClick={onOpenProblem}
+            title="Abrir problemas inversos completos"
+            className="px-3 py-1 text-xs font-bold rounded-lg text-ink-soft hover:text-ink transition"
           >
             Problemas
+          </button>
+          <button
+            onClick={onOpenTheory}
+            title="Abrir teoría completa"
+            className="px-3 py-1 text-xs font-bold rounded-lg text-ink-soft hover:text-ink transition"
+          >
+            Teoría
           </button>
         </div>
 
@@ -357,7 +341,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           {/* BOTÓN CONFIGURAR EN MÓVIL (< 1024px) */}
           <button
             onClick={onToggleSidebar}
-            title={isSidebarOpen ? 'Cerrar panel de configuración' : 'Abrir panel de configuración'}
+            title={isSidebarOpen ? 'Cerrar panel' : 'Abrir panel'}
             className={`md:hidden flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition shrink-0 ${
               isSidebarOpen
                 ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/40'
@@ -365,23 +349,23 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
             }`}
           >
             {isSidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4 text-accent" />}
-            <span>{isSidebarOpen ? 'Cerrar' : 'Configurar'}</span>
+            <span>{isSidebarOpen ? 'Cerrar' : 'Ver panel'}</span>
           </button>
 
-          {/* BOTÓN ZONA DE TEORÍA */}
+          {/* BOTÓN HISTORIAL / COPIAS */}
           <button
-            onClick={onOpenTheory}
-            title="Abrir Zona de Teoría completa (Fórmulas, Propiedades y Gráficos)"
-            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-panel border border-border text-ink hover:border-accent hover:text-accent shadow-xs text-xs font-bold transition shrink-0"
+            onClick={onOpenHistory}
+            title="Historial de copias de seguridad locales"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-panel border border-border text-ink hover:border-accent hover:text-accent transition shrink-0 shadow-xs cursor-pointer active:scale-95"
           >
-            <BookOpen className="h-4 w-4 text-accent shrink-0" />
-            <span className="hidden md:inline">Teoría</span>
+            <History className="h-3.5 w-3.5 text-accent shrink-0" />
+            <span className="hidden sm:inline">Historial</span>
           </button>
 
           {/* BOTÓN OCULTAR / MOSTRAR PANEL LATERAL EN ESCRITORIO */}
           <button
             onClick={onToggleSidebar}
-            title={isSidebarOpen ? 'Ocultar panel lateral (Área máxima de pizarra)' : 'Mostrar panel lateral'}
+            title={isSidebarOpen ? 'Ocultar panel lateral' : 'Ver panel lateral'}
             className={`hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition shrink-0 ${
               isSidebarOpen
                 ? 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
@@ -389,7 +373,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
             }`}
           >
             {isSidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-            <span>{isSidebarOpen ? 'Ocultar' : 'Ver Panel'}</span>
+            <span>{isSidebarOpen ? 'Ocultar' : 'Ver panel'}</span>
           </button>
 
           {/* MODO OSCURO */}
@@ -533,7 +517,23 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
             <div className="flex flex-col gap-1.5">
               <button
                 onClick={() => {
-                  if (onExportPNG) onExportPNG(exportFileName);
+                  onSaveHistory();
+                  setIsSaveMenuOpen(false);
+                }}
+                className="flex items-center gap-3 w-full p-2.5 rounded-2xl text-left text-ink hover:bg-panel transition cursor-pointer"
+              >
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 shrink-0">
+                  <History className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-xs text-ink">Guardar estado actual</div>
+                  <div className="text-[10px] text-ink-soft truncate">Crea un punto de restauración en el historial</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onExportPNG) onExportPNG(exportFileName, 'student');
                   setIsSaveMenuOpen(false);
                 }}
                 className="flex items-center gap-3 w-full p-2.5 rounded-2xl text-left text-ink hover:bg-panel transition cursor-pointer"
@@ -543,9 +543,27 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="font-bold text-xs text-ink flex items-center gap-1">
-                    Guardar como PNG <span className="text-[9px] bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded font-mono">Reanudable</span>
+                    PNG • Alumno <span className="text-[9px] bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded font-mono">Ejercicio</span>
                   </div>
-                  <div className="text-[10px] text-ink-soft truncate">Imagen con proyecto editable integrado</div>
+                  <div className="text-[10px] text-ink-soft truncate">Versión de trabajo para el estudiante</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onExportPNG) onExportPNG(exportFileName, 'teacher');
+                  setIsSaveMenuOpen(false);
+                }}
+                className="flex items-center gap-3 w-full p-2.5 rounded-2xl text-left text-ink hover:bg-panel transition cursor-pointer"
+              >
+                <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-500 shrink-0">
+                  <Download className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-xs text-ink flex items-center gap-1">
+                    PNG • Profesor <span className="text-[9px] bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300 px-1.5 py-0.5 rounded font-mono">Guía</span>
+                  </div>
+                  <div className="text-[10px] text-ink-soft truncate">Versión con orientación didáctica</div>
                 </div>
               </button>
 
@@ -569,7 +587,7 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
 
               <button
                 onClick={() => {
-                  if (onExportPDF) onExportPDF();
+                  if (onExportPDF) onExportPDF('student');
                   setIsSaveMenuOpen(false);
                 }}
                 className="flex items-center gap-3 w-full p-2.5 rounded-2xl text-left text-ink hover:bg-panel transition cursor-pointer"
@@ -578,8 +596,24 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
                   <FileText className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="font-bold text-xs text-ink">Exportar como PDF</div>
-                  <div className="text-[10px] text-ink-soft truncate">Ficha pedagógica para imprimir</div>
+                  <div className="font-bold text-xs text-ink">PDF • Alumno</div>
+                  <div className="text-[10px] text-ink-soft truncate">Hoja de ejercicio para imprimir o entregar</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onExportPDF) onExportPDF('teacher');
+                  setIsSaveMenuOpen(false);
+                }}
+                className="flex items-center gap-3 w-full p-2.5 rounded-2xl text-left text-ink hover:bg-panel transition cursor-pointer"
+              >
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-500 shrink-0">
+                  <FileText className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-xs text-ink">PDF • Profesor</div>
+                  <div className="text-[10px] text-ink-soft truncate">Guía docente con orientación de resolución</div>
                 </div>
               </button>
             </div>

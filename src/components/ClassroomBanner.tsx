@@ -48,6 +48,11 @@ export const ClassroomBanner: React.FC<ClassroomBannerProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [tempText, setTempText] = useState(customStatement);
   const [showProblemPicker, setShowProblemPicker] = useState(false);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<'básico' | 'intermedio' | 'avanzado' | 'todos'>('todos');
+
+  const filteredProblems = selectedDifficulty === 'todos'
+    ? CLASSROOM_PROBLEMS
+    : CLASSROOM_PROBLEMS.filter((problem) => problem.difficulty === selectedDifficulty);
 
   const handleSaveText = () => {
     onUpdateCustomStatement(tempText);
@@ -186,27 +191,54 @@ export const ClassroomBanner: React.FC<ClassroomBannerProps> = ({
               ✕
             </button>
           </div>
-          <div className="space-y-2">
-            {CLASSROOM_PROBLEMS.map((prob) => (
+          <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border">
+            {(['todos', 'básico', 'intermedio', 'avanzado'] as const).map((level) => (
               <button
-                key={prob.id}
-                onClick={() => {
-                  onSelectScenario(prob);
-                  setShowProblemPicker(false);
-                }}
-                className="w-full text-left p-2.5 rounded-xl bg-panel hover:bg-accent/5 hover:border-accent border border-border transition group"
+                key={level}
+                onClick={() => setSelectedDifficulty(level)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition ${
+                  selectedDifficulty === level
+                    ? 'bg-accent text-white shadow-sm'
+                    : 'bg-panel text-ink-soft hover:text-accent border border-border'
+                }`}
               >
-                <div className="flex items-center justify-between text-xs font-bold text-ink group-hover:text-accent">
-                  <span>{prob.title}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface text-accent font-semibold">
-                    {prob.category}
-                  </span>
-                </div>
-                <p className="text-[11px] text-ink-soft mt-1 line-clamp-2 leading-relaxed">
-                  {prob.statement}
-                </p>
+                {level === 'todos' ? 'Todos' : level}
               </button>
             ))}
+          </div>
+
+          <div className="space-y-2">
+            {filteredProblems.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-panel p-3 text-xs text-ink-soft">
+                No hay problemas en esta dificultad para este momento.
+              </div>
+            ) : (
+              filteredProblems.map((prob) => (
+                <button
+                  key={prob.id}
+                  onClick={() => {
+                    onSelectScenario(prob);
+                    setShowProblemPicker(false);
+                  }}
+                  className="w-full text-left p-2.5 rounded-xl bg-panel hover:bg-accent/5 hover:border-accent border border-border transition group"
+                >
+                  <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink group-hover:text-accent">
+                    <span>{prob.title}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface text-accent font-semibold whitespace-nowrap">
+                      {prob.difficulty || 'general'}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface text-ink-soft border border-border">
+                      {prob.category}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-ink-soft mt-1 line-clamp-2 leading-relaxed">
+                    {prob.statement}
+                  </p>
+                </button>
+              ))
+            )}
           </div>
         </div>
       )}
