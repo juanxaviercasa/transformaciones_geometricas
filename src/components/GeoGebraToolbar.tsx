@@ -264,43 +264,40 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
   );
 
   return (
-    <header className="relative z-40 flex flex-col bg-surface border-b border-border shadow-sm select-none">
-      {/* FILA 1: CABECERA SUPERIOR - BRANDING + PESTAÑAS DE VISTA + ARCHIVO Y AJUSTES GLOBALES */}
-      <div className="flex items-center justify-between gap-2 px-2.5 sm:px-3 py-1.5">
-        {/* LADO IZQUIERDO: LOGO (COMPLETAMENTE AISLADO, SIN SUPERPOSICIÓN) */}
-        <div className="flex items-center gap-2 shrink-0 mr-1 sm:mr-2">
+    <header className="relative z-40 flex select-none flex-col border-b border-border bg-surface shadow-sm">
+      {/* FILA 1: CABECERA SUPERIOR - BRANDING + MODOS DE APRENDIZAJE + ACCIONES DE ARCHIVO Y AJUSTES */}
+      <div className="flex items-center justify-between gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 md:py-2 overflow-x-auto no-scrollbar">
+        <div className="flex shrink-0 items-center gap-1.5">
           <BrandLogo className="hidden sm:flex" />
           <BrandLogo compact className="flex sm:hidden" />
         </div>
 
-        {/* CENTRO: NAVEGACIÓN DE PRÁCTICA Y APOYO EN LA PARTE SUPERIOR */}
-        <div className="hidden md:flex items-center rounded-xl bg-panel p-0.5 border border-border shrink-0 shadow-xs">
+        {/* MODOS DE APRENDIZAJE: Cuaderno, Problemas, Teoría (integrados en Fila 1 tanto en móvil como en desktop para ahorrar espacio vertical) */}
+        <div className="flex items-center rounded-xl border border-border bg-panel p-0.5 shadow-xs shrink-0">
           <button
             onClick={onOpenNotebook}
             title="Abrir cuaderno completo"
-            className="px-3 py-1 text-xs font-bold rounded-lg text-ink-soft hover:text-ink transition"
+            className="rounded-lg px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold text-ink-soft transition hover:text-ink hover:bg-surface/80 active:scale-95"
           >
             Cuaderno
           </button>
           <button
             onClick={onOpenProblem}
             title="Abrir problemas inversos completos"
-            className="px-3 py-1 text-xs font-bold rounded-lg text-ink-soft hover:text-ink transition"
+            className="rounded-lg px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold text-ink-soft transition hover:text-ink hover:bg-surface/80 active:scale-95"
           >
             Problemas
           </button>
           <button
             onClick={onOpenTheory}
             title="Abrir teoría completa"
-            className="px-3 py-1 text-xs font-bold rounded-lg text-ink-soft hover:text-ink transition"
+            className="rounded-lg px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold text-ink-soft transition hover:text-ink hover:bg-surface/80 active:scale-95"
           >
             Teoría
           </button>
         </div>
 
-        {/* LADO DERECHO: ACCIONES DE ARCHIVO, TEORÍA, MODO OSCURO Y PANTALLA COMPLETA */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          {/* BOTÓN ABRIR PROYECTO O IMAGEN */}
+        <div className="flex shrink-0 items-center justify-end gap-1 sm:gap-1.5">
           <input
             type="file"
             ref={fileInputRef}
@@ -316,71 +313,66 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
           <button
             onClick={() => fileInputRef.current?.click()}
             title="Abrir imagen PNG o archivo de proyecto (.geot)"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-panel border border-border text-ink hover:text-accent hover:border-accent transition shrink-0 shadow-xs cursor-pointer active:scale-95"
+            className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-panel p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-semibold text-ink shadow-xs transition hover:border-accent hover:text-accent active:scale-95"
           >
-            <FolderOpen className="h-3.5 w-3.5 text-accent shrink-0" />
+            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-accent" />
             <span className="hidden sm:inline">Abrir</span>
           </button>
 
-          {/* BOTÓN GUARDAR / EXPORTAR */}
           <button
             onClick={() => {
               if (isSidebarOpen) onToggleSidebar();
               setIsSaveMenuOpen(true);
             }}
             title="Guardar / Exportar proyecto o imagen"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-accent text-white hover:bg-accent/90 transition shadow-sm shrink-0 cursor-pointer active:scale-95"
+            className="flex shrink-0 items-center gap-1 rounded-xl bg-accent p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent/90 active:scale-95"
           >
             <Download className="h-3.5 w-3.5 shrink-0" />
             <span className="hidden sm:inline">Guardar</span>
-            <ChevronDown className="h-3 w-3 opacity-80 shrink-0" />
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-80" />
           </button>
 
-          <div className="h-4 w-px bg-border mx-0.5 shrink-0" />
+          <div className="hidden h-4 w-px bg-border mx-0.5 shrink-0 sm:block" />
 
-          {/* BOTÓN CONFIGURAR EN MÓVIL (< 1024px) */}
           <button
             onClick={onToggleSidebar}
             title={isSidebarOpen ? 'Cerrar panel' : 'Abrir panel'}
-            className={`md:hidden flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition shrink-0 ${
+            className={`flex shrink-0 items-center gap-1 rounded-xl border p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-bold transition md:hidden ${
               isSidebarOpen
-                ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/40'
-                : 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
+                ? 'border-rose-200 bg-rose-50 text-rose-600 dark:bg-rose-950/40'
+                : 'border-accent/30 bg-accent/10 text-accent hover:bg-accent/20'
             }`}
           >
             {isSidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4 text-accent" />}
-            <span>{isSidebarOpen ? 'Cerrar' : 'Ver panel'}</span>
+            <span className="hidden sm:inline">{isSidebarOpen ? 'Cerrar' : 'Ver panel'}</span>
           </button>
 
-          {/* BOTÓN HISTORIAL / COPIAS */}
           <button
             onClick={onOpenHistory}
             title="Historial de copias de seguridad locales"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-panel border border-border text-ink hover:border-accent hover:text-accent transition shrink-0 shadow-xs cursor-pointer active:scale-95"
+            className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-panel p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-semibold text-ink shadow-xs transition hover:border-accent hover:text-accent active:scale-95"
           >
-            <History className="h-3.5 w-3.5 text-accent shrink-0" />
+            <History className="h-3.5 w-3.5 shrink-0 text-accent" />
             <span className="hidden sm:inline">Historial</span>
           </button>
 
-          {/* BOTÓN OCULTAR / MOSTRAR PANEL LATERAL EN ESCRITORIO */}
           <button
             onClick={onToggleSidebar}
             title={isSidebarOpen ? 'Ocultar panel lateral' : 'Ver panel lateral'}
-            className={`hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition shrink-0 ${
+            className={`hidden shrink-0 items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition md:flex ${
               isSidebarOpen
-                ? 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
-                : 'bg-panel border-border text-ink hover:border-accent hover:text-accent'
+                ? 'border-accent/30 bg-accent/10 text-accent hover:bg-accent/20'
+                : 'border-border bg-panel text-ink hover:border-accent hover:text-accent'
             }`}
           >
             {isSidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
             <span>{isSidebarOpen ? 'Ocultar' : 'Ver panel'}</span>
           </button>
 
-          {/* MODO OSCURO */}
           <button
             onClick={onToggleDarkMode}
             title={isDarkMode ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
-            className="p-1.5 sm:p-2 rounded-xl bg-panel border border-border text-ink hover:text-accent hover:border-accent transition flex items-center justify-center shrink-0"
+            className="flex shrink-0 items-center justify-center rounded-xl border border-border bg-panel p-1.5 text-ink transition hover:border-accent hover:text-accent sm:p-2"
           >
             {isDarkMode ? (
               <Sun className="h-4 w-4 text-amber-400 animate-in spin-in-180 duration-200" />
@@ -389,23 +381,22 @@ export const GeoGebraToolbar: React.FC<GeoGebraToolbarProps> = ({
             )}
           </button>
 
-          {/* PANTALLA COMPLETA */}
           <button
             onClick={onToggleFullscreen}
             title="Pantalla completa del plano cartesiano"
-            className="hidden sm:flex p-2 rounded-xl bg-panel text-ink border border-border hover:border-border-strong hover:text-accent transition shrink-0"
+            className="hidden shrink-0 rounded-xl border border-border bg-panel p-2 text-ink transition hover:border-border-strong hover:text-accent sm:flex"
           >
             <Maximize className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* FILA 2: BARRA DEDICADA DE HERRAMIENTAS GEOMÉTRICAS Y EDICIÓN (DESKTOP, TABLET Y MÓVIL) */}
-      <div className="flex items-center justify-start lg:justify-center gap-2 px-2.5 sm:px-3 py-1.5 bg-panel/75 border-t border-border/80 overflow-x-auto no-scrollbar shrink-0">
-        <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border shadow-xs shrink-0">
+      {/* FILA 2: BARRA DEDICADA DE HERRAMIENTAS GEOMÉTRICAS Y EDICIÓN */}
+      <div className="flex items-center justify-start gap-1.5 sm:gap-2 border-t border-border/80 bg-panel/75 px-2 py-1 sm:px-3 sm:py-1.5 overflow-x-auto no-scrollbar lg:justify-center">
+        <div className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1 shadow-xs">
           {renderGeometryTools()}
         </div>
-        <div className="flex items-center gap-1 bg-surface p-1 rounded-xl border border-border shadow-xs shrink-0">
+        <div className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-surface p-1 shadow-xs">
           {renderActionButtons()}
         </div>
       </div>

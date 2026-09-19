@@ -412,29 +412,31 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
         </button>
       </header>
 
-      {/* ── MOBILE / TABLET HORIZONTAL SELECTOR (Scrollable Chips) ── */}
-      <div className="md:hidden flex items-center gap-2 px-3 py-2.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 overflow-x-auto no-scrollbar shrink-0 shadow-inner">
-        {THEORIES.map((t) => {
-          const Icon = t.icon;
-          const isActive = t.id === activeId;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setActiveId(t.id)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all shrink-0 border ${
-                isActive
-                  ? "bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-950 dark:border-white shadow-sm scale-[1.02]"
-                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400"
-              }`}
-            >
-              <Icon
-                className="h-3.5 w-3.5"
-                style={{ color: isActive ? undefined : t.colorAccent }}
-              />
-              <span>{t.label}</span>
-            </button>
-          );
-        })}
+      {/* ── MOBILE / TABLET RESPONSIVE SELECTOR ── */}
+      <div className="md:hidden border-b border-slate-200 bg-slate-100 px-3 py-2.5 shadow-inner dark:border-slate-800 dark:bg-slate-900 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {THEORIES.map((t) => {
+            const Icon = t.icon;
+            const isActive = t.id === activeId;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveId(t.id)}
+                className={`flex flex-1 min-w-[120px] items-center justify-center gap-2 rounded-xl border px-2.5 py-2 text-[11px] font-black whitespace-nowrap transition-all ${
+                  isActive
+                    ? "border-slate-900 bg-slate-900 text-white shadow-sm dark:border-white dark:bg-white dark:text-slate-950"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-indigo-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                }`}
+              >
+                <Icon
+                  className="h-3.5 w-3.5"
+                  style={{ color: isActive ? undefined : t.colorAccent }}
+                />
+                <span>{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── MAIN WORK AREA: SIDEBAR + CONTENT ──────────────────────── */}
@@ -548,6 +550,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                 key={theory.id}
                 transformationType={theory.id}
                 colorAccent={theory.colorAccent}
+                onChangeTransformationType={(type) => setActiveId(type)}
               />
             </section>
 

@@ -131,11 +131,55 @@ export function Workspace({
   const [problemMode, setProblemMode] = useState<ProblemMode>('DIRECT');
   const [currentScenario, setCurrentScenario] = useState<ProblemScenario | null>(null);
   const [selectedProblemTab, setSelectedProblemTab] = useState<'selector' | 'ejercicio'>('selector');
-  const [studyMode, setStudyMode] = useState<'ruta' | 'libre'>('ruta');
-  const [selectedProblemDifficulty, setSelectedProblemDifficulty] = useState<'básico' | 'intermedio' | 'avanzado'>('básico');
-  const [selectedProblemType, setSelectedProblemType] = useState<ProblemScenario['targetConfig']['type'] | 'todos'>('todos');
+  const [studyMode, setStudyMode] = useState<'ruta' | 'libre'>(() => {
+    if (typeof window === 'undefined') return 'ruta';
+    try {
+      const raw = window.localStorage.getItem('geotransform_problem_progress_v1');
+      if (!raw) return 'ruta';
+      const parsed = JSON.parse(raw);
+      return parsed?.studyMode === 'libre' ? 'libre' : 'ruta';
+    } catch {
+      return 'ruta';
+    }
+  });
+  const [selectedProblemDifficulty, setSelectedProblemDifficulty] = useState<'básico' | 'intermedio' | 'avanzado'>(() => {
+    if (typeof window === 'undefined') return 'básico';
+    try {
+      const raw = window.localStorage.getItem('geotransform_problem_progress_v1');
+      if (!raw) return 'básico';
+      const parsed = JSON.parse(raw);
+      return parsed?.selectedProblemDifficulty === 'intermedio' || parsed?.selectedProblemDifficulty === 'avanzado'
+        ? parsed.selectedProblemDifficulty
+        : 'básico';
+    } catch {
+      return 'básico';
+    }
+  });
+  const [selectedProblemType, setSelectedProblemType] = useState<ProblemScenario['targetConfig']['type'] | 'todos'>(() => {
+    if (typeof window === 'undefined') return 'todos';
+    try {
+      const raw = window.localStorage.getItem('geotransform_problem_progress_v1');
+      if (!raw) return 'todos';
+      const parsed = JSON.parse(raw);
+      const validTypes = ['todos', 'translation', 'reflection', 'rotation', 'central_reflection', 'homothety'];
+      return validTypes.includes(parsed?.selectedProblemType) ? parsed.selectedProblemType : 'todos';
+    } catch {
+      return 'todos';
+    }
+  });
   const [studySessionCount, setStudySessionCount] = useState(0);
-  const [completedProblemIds, setCompletedProblemIds] = useState<string[]>([]);
+  const [completedProblemIds, setCompletedProblemIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem('geotransform_problem_progress_v1');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      const ids = Array.isArray(parsed?.completedProblemIds) ? parsed.completedProblemIds : [];
+      return ids.filter((id): id is string => typeof id === 'string');
+    } catch {
+      return [];
+    }
+  });
   const [customStatement, setCustomStatement] = useState<string>(
     'Pizarra interactiva: traza tu figura en el plano o carga un modelo escolar.'
   );
@@ -169,6 +213,17 @@ export function Workspace({
     if (selectedProblemDifficulty === 'intermedio') return 'Siguiente actividad sugerida: combina un ejercicio de nivel intermedio con un tipo diferente de transformación.';
     return 'Siguiente actividad sugerida: empieza con un problema básico y consolida la idea principal antes de avanzar.';
   }, [selectedProblemDifficulty, selectedProblemType, studyMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const payload = {
+      studyMode,
+      selectedProblemDifficulty,
+      selectedProblemType,
+      completedProblemIds
+    };
+    window.localStorage.setItem('geotransform_problem_progress_v1', JSON.stringify(payload));
+  }, [studyMode, selectedProblemDifficulty, selectedProblemType, completedProblemIds]);
 
   const markCurrentProblemAsCompleted = useCallback(() => {
     if (!currentScenario) return;
@@ -2725,6 +2780,16 @@ export function Workspace({
     }, 4500);
   };
 
+  const resetProblemProgress = useCallback(() => {
+    setCompletedProblemIds([]);
+    setSelectedProblemDifficulty('básico');
+    setSelectedProblemType('todos');
+    setStudyMode('ruta');
+    setCurrentScenario(null);
+    setSelectedProblemTab('selector');
+    showToast('Progreso de ejercicios reiniciado.', 'success');
+  }, []);
+
   const buildSnapshot = useCallback((title?: string): GeoProjectData => ({
     appName: 'GeoTransform Pro',
     version: '1.0',
@@ -3306,11 +3371,11 @@ export function Workspace({
         onLoadProject={handleLoadProjectFile}
       />
 
-      {/* 2. SUB-BARRA DE INSTRUCCIONES CONTEXTUALES GEOGEBRA */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-1 sm:py-1.5 bg-panel/80 border-b border-border text-xs min-h-[32px] shrink-0">
+      {/* 2. SUB-BARRA DE INSTRUCCIONES CONTEXTUALES GEOGEBRA (ULTRA COMPACTA) */}
+      <div className="flex items-center justify-between px-2 sm:px-4 py-0.5 sm:py-1 bg-panel/80 border-b border-border text-[11px] sm:text-xs min-h-[24px] sm:min-h-[28px] shrink-0">
         <div className="flex items-center gap-1.5 text-ink-soft overflow-hidden mr-2">
-          <Info className="h-3.5 w-3.5 text-accent shrink-0" />
-          <span className="font-medium truncate text-[11px] sm:text-xs">
+          <Info className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-accent shrink-0" />
+          <span className="font-medium truncate text-[10px] sm:text-xs">
             {tool === 'select' && 'Mover: Arrastra vértices, centros o el fondo para desplazar el plano.'}
             {tool === 'point' && 'Punto: Haz clic o toca en el plano para marcar puntos libres sin unirlos.'}
             {tool === 'segment' &&
@@ -3323,20 +3388,20 @@ export function Workspace({
         </div>
 
         {/* Indicador de estado de la figura en la pizarra */}
-        <div className="flex items-center gap-1.5 text-xs shrink-0">
+        <div className="flex items-center gap-1 text-[10px] sm:text-xs shrink-0">
           <span className="font-mono text-ink-soft hidden sm:inline">
             {vertices.length} {vertices.length === 1 ? 'punto' : 'puntos'}
           </span>
           {isPolygon ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
+            <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[11px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
               Polígono Cerrado
             </span>
           ) : segments.length > 0 ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
-              {segments.length} {segments.length === 1 ? 'seg.' : 'seg.'}
+            <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[11px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+              {segments.length} seg.
             </span>
           ) : vertices.length > 0 ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-ink-soft">
+            <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-ink-soft">
               {vertices.length} pts
             </span>
           ) : null}
@@ -3509,7 +3574,7 @@ export function Workspace({
 
         {/* PANEL LATERAL RESPONSIVO (DRAWER EN MÓVIL/TABLETA, ASIDE LATERAL EN DESKTOP) */}
         {isSidebarOpen && (
-          <aside className="fixed inset-y-0 right-0 z-50 h-full max-h-full w-[88vw] max-w-[360px] sm:w-[380px] md:relative md:inset-y-auto md:right-auto md:h-auto md:max-h-full md:w-[380px] md:shrink-0 min-h-0 flex flex-col overflow-hidden border-l border-border bg-gradient-to-b from-surface via-surface to-panel shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200 md:rounded-l-3xl md:border-r md:border-border">
+          <aside className="fixed inset-y-2 right-2 z-50 flex h-[calc(100vh-1rem)] w-[88vw] max-w-[360px] min-h-0 flex-col overflow-hidden border-l border-border bg-gradient-to-b from-surface via-surface to-panel shadow-2xl animate-in slide-in-from-right duration-200 sm:right-3 sm:w-[380px] md:relative md:inset-y-auto md:right-auto md:h-auto md:max-h-full md:w-[380px] md:shrink-0 md:shadow-none md:rounded-l-3xl md:border-r md:border-border">
             {/* Cabecera del panel con identidad didáctica y visual clara */}
             <div className="relative shrink-0 border-b border-border bg-gradient-to-r from-accent/12 via-panel to-surface/95 px-2.5 py-2.5">
               <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
@@ -3565,21 +3630,6 @@ export function Workspace({
                 >
                   Pizarra
                 </button>
-              </div>
-
-              <div className="mt-3 rounded-2xl border border-accent/20 bg-gradient-to-r from-accent/8 to-sky-500/5 p-2.5 shadow-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-accent">Trabajo activo</div>
-                    <div className="mt-1 text-xs font-semibold text-ink">Transformación del plano</div>
-                  </div>
-                  <span className="rounded-full border border-accent/20 bg-white/70 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-accent dark:bg-slate-900/60">
-                    {config.type}
-                  </span>
-                </div>
-                <p className="mt-2 text-[11px] text-ink-soft">
-                  Ajusta la preimagen y observa cómo cambia la figura en la pizarra.
-                </p>
               </div>
             </div>
 
@@ -4076,9 +4126,17 @@ export function Workspace({
                         </span>
                       ))}
                     </div>
-                    <p className="mt-2 text-[11px] leading-relaxed text-emerald-700">
-                      {nextStudySuggestion}
-                    </p>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <p className="text-[11px] leading-relaxed text-emerald-700">
+                        {nextStudySuggestion}
+                      </p>
+                      <button
+                        onClick={resetProblemProgress}
+                        className="rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-rose-700 transition hover:bg-rose-100"
+                      >
+                        Reiniciar avance
+                      </button>
+                    </div>
                   </div>
 
                   <div className="rounded-2xl border border-emerald-200 bg-white p-3">

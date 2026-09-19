@@ -219,7 +219,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
       : `Puntos libres (${vertices.length})`;
 
   return (
-    <div className="h-full min-h-0 bg-surface text-ink text-xs font-sans overflow-y-auto overscroll-contain p-3.5 space-y-4">
+    <div className="h-full min-h-0 bg-surface text-ink text-xs font-sans overflow-y-auto overscroll-contain p-3.5 space-y-4 pb-16">
       <div className="rounded-2xl border border-accent/20 bg-gradient-to-br from-accent/12 via-sky-500/5 to-transparent p-3 shadow-sm ring-1 ring-accent/10">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -231,24 +231,22 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
               <div className="text-sm font-bold text-ink">Espacio de transformación</div>
             </div>
           </div>
-          <span className="rounded-full border border-accent/20 bg-white/70 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-accent dark:bg-slate-900/60">
+          <span className="rounded-full border border-accent/20 bg-white/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-accent dark:bg-slate-900/60 shadow-xs">
             {transformationLabel}
           </span>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <div className="rounded-xl border border-border bg-panel/80 p-2">
-            <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-ink-faint">Figura</div>
-            <div className="mt-1 text-xs font-bold text-ink">{figureStateLabel}</div>
-          </div>
-          <div className="rounded-xl border border-border bg-panel/80 p-2">
-            <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-ink-faint">Vértices</div>
-            <div className="mt-1 text-xs font-bold text-ink">{vertices.length}</div>
-          </div>
-          <div className="rounded-xl border border-border bg-panel/80 p-2">
-            <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-ink-faint">Objetivo</div>
-            <div className="mt-1 text-xs font-bold text-ink">{isPolygon ? 'Área y perímetro' : 'Construcción'}</div>
-          </div>
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-panel/80 px-2.5 py-1 text-[11px] font-semibold text-ink shadow-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
+            {isPolygon ? 'Polígono cerrado' : segments.length > 0 ? `Segmentos (${segments.length})` : 'Puntos libres'}
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel/80 px-2 py-1 text-[11px] font-semibold text-accent font-mono shadow-xs">
+            {vertices.length} {vertices.length === 1 ? 'vértice' : 'vértices'}
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-lg border border-border bg-panel/80 px-2 py-1 text-[11px] font-medium text-ink-soft shadow-xs">
+            Objetivo: <strong className="text-ink font-semibold">{isPolygon ? 'Área y Perímetro' : 'Construcción'}</strong>
+          </span>
         </div>
       </div>
 
