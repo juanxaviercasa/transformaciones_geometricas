@@ -25,6 +25,9 @@ export function formulaToLatex(raw: string): string {
   s = s.replace(/≅/g, ' \\cong ');
   s = s.replace(/∘/g, ' \\circ ');
   s = s.replace(/sen\(/g, '\\sin(');
+  s = s.replace(/cos\(/g, '\\cos(');
+  s = s.replace(/Área\(/g, '\\text{Área}(');
+  s = s.replace(/Area\(/g, '\\text{Área}(');
   s = s.replace(/√\(([^)]+)\)/g, '\\sqrt{$1}');
   s = s.replace(/√([0-9a-zA-Z]+)/g, '\\sqrt{$1}');
   s = s.replace(/(\d+)°/g, '$1^\\circ');
@@ -32,59 +35,121 @@ export function formulaToLatex(raw: string): string {
 }
 
 /**
+ * Aplica una regla regex SOLO a los fragmentos de texto plano,
+ * protegiendo los fragmentos que ya están delimitados por $...$ o $$...$$.
+ */
+function applyMathRule(
+  text: string,
+  regex: RegExp,
+  replacer: (...args: any[]) => string
+): string {
+  const parts = text.split(/(\$\$[\s\S]+?\$\$|\$[^\$]+?\$)/g);
+  return parts
+    .map((part) => {
+      if (part.startsWith('$')) {
+        return part; // Ya es un bloque KaTeX protegido, no tocar
+      }
+      return part.replace(regex, replacer);
+    })
+    .join('');
+}
+
+/**
  * Procesa un texto que puede mezclar prosa y expresiones matemáticas,
- * convirtiendo patrones matemáticos a delimitadores $...$ para KaTeX.
+ * convirtiendo patrones matemáticos a delimitadores $...$ para KaTeX de forma segura.
  */
 export function autoFormatMathText(text: string): string {
   if (!text) return '';
 
-  // Si ya tiene delimitadores explícitos $, respetamos los bloques existentes y procesamos el resto
-  const segments = text.split(/(\$\$[\s\S]+?\$\$|\$[^\$]+?\$)/g);
+  let current = formulaToLatex(text);
 
-  return segments
-    .map((seg) => {
-      if (seg.startsWith('$')) return seg;
+  // Regla 1: Mapeos completos tipo P(x, y) \to P'(-y, x) o A(3, 2) \to A'(3, -2)
+  current = applyMathRule(
+    current,
+    /([A-Za-z0-9'_]+\([^)]+\)\s*\\to\s*[A-Za-z0-9'_]+\([^)]+\))/g,
+    (_, match) => `$${match.trim()}$`
+  );
 
-      let formatted = formulaToLatex(seg);
+  // Regla 2: Vectores directores: v = (x, y) o (\Delta x, \Delta y)
+  current = applyMathRule(
+    current,
+    /\bv\s*=\s*\(([^)]+)\)/g,
+    (_, coords) => `$\\vec{v} = (${coords.trim()})$`
+  );
+  current = applyMathRule(
+    current,
+    /\((\s*Δx\s*,\s*Δy\s*)\)/g,
+    () => `$(\\Delta x, \\Delta y)$`
+  );
+  current = applyMathRule(
+    current,
+    /\b\|v\|\b/g,
+    () => `$|\\vec{v}|$`
+  );
 
-      // 1. Módulos o igualdades matemáticas completas: |OA| = \sqrt{9+1} = \sqrt{10} = |OA'|
-      // o |v| = \sqrt{3^2 + 4^2} = 5
-      formatted = formatted.replace(
-        /(\|?[A-Za-z0-9'_|]+\s*=\s*[^✓\n,;]+)/g,
-        (match) => {
-          if (/[=\\√^_+*\-]/.test(match)) {
-            return `$${match.trim()}$`;
-          }
-          return match;
-        }
-      );
+  // Regla 3: Módulos con barras: |OA| = \sqrt{9+1} = \sqrt{10} = |OA'| o |v| = ...
+  current = applyMathRule(
+    current,
+    /(\|[A-Za-z0-9'_]+\|\s*=\s*[^✓\n;]+)/g,
+    (match) => {
+      let m = match.trim();
+      const unitMatch = m.match(/\s+([a-zA-ZáéíóúÁÉÍÓÚ]+)$/);
+      if (unitMatch) {
+        const unit = unitMatch[1];
+        m = m.slice(0, -unitMatch[0].length).trim();
+        return `$${m}$ ${unit}`;
+      }
+      return `$${m}$`;
+    }
+  );
 
-      // 2. Mapeos con flecha: A(3, 2) \to A'(3, -2) o P(x, y) \to P'(-y, x)
-      formatted = formatted.replace(
-        /([A-Za-z0-9'_]+\([^)]+\)\s*\\to\s*[A-Za-z0-9'_]+\([^)]+\))/g,
-        '$$$1$'
-      );
+  // Regla 4: Puntos con coordenadas: A(1, 1), A'(3, -2), O(0, 0), C(1, 2), P'(x, y)
+  current = applyMathRule(
+    current,
+    /\b([A-Z]'?)\s*\(([^)]+)\)/g,
+    (_, label, coords) => `$${label}(${coords.trim()})$`
+  );
 
-      // 3. Vector v = (x, y)
-      formatted = formatted.replace(/\bv\s*=\s*\(([^)]+)\)/g, '$\\vec{v} = ($1)$');
-      formatted = formatted.replace(/\b\|v\|\b/g, '$|\\vec{v}|$');
+  // Regla 5: Ecuaciones de coordenadas o sustituciones aritméticas:
+  // x' = 2(2) - (-1) = 5 o y' = 4 o x' = x \cdot \cos(\alpha) ...
+  current = applyMathRule(
+    current,
+    /\b([xy]'?)\s*=\s*([^,;\n]+)/gi,
+    (match) => {
+      if (/[0-9+\-*\\^()]/.test(match)) {
+        return `$${match.trim()}$`;
+      }
+      return match;
+    }
+  );
 
-      // 4. Puntos con coordenadas: A(1, 1), A'(3, -2), O(0, 0), C(1, 2)
-      formatted = formatted.replace(/\b([A-Z]'?)\s*\(([^)]+)\)/g, '$$1($2)$');
+  // Regla 6: Ecuaciones de factor de escala: k = 2.5
+  current = applyMathRule(
+    current,
+    /\b([k])\s*=\s*(-?\d+(\.\d+)?)\b/gi,
+    (_, varName, val) => `$${varName} = ${val}$`
+  );
 
-      // 5. Polígonos o figuras primadas: A'B'C', A', B', C', F', P'
-      formatted = formatted.replace(/\b([A-Z]'[A-Z]'[A-Z]')\b/g, '$$1$');
-      formatted = formatted.replace(/\b([A-Z]')\b/g, '$$1$');
+  // Regla 7: Ecuaciones con Área: \text{Área}(F') = k^2 \cdot \text{Área}(F)
+  current = applyMathRule(
+    current,
+    /(\\text\{Área\}\([^)]+\)\s*=\s*[^✓\n;]+)/g,
+    (match) => `$${match.trim()}$`
+  );
 
-      // 6. Ecuaciones simples: x = 2, y = -1, k = 2.5
-      formatted = formatted.replace(/\b([xyk]'?)\s*=\s*(-?\d+(\.\d+)?|[a-z])\b/gi, '$$1 = $2$');
+  // Regla 8: Figuras o puntos primados sueltos: A'B'C', A', B', C', F', P'
+  current = applyMathRule(
+    current,
+    /\b([A-Z]'[A-Z]'[A-Z]')\b/g,
+    (_, match) => `$${match}$`
+  );
+  current = applyMathRule(
+    current,
+    /\b([A-Z]')\b/g,
+    (_, match) => `$${match}$`
+  );
 
-      // 7. Vector director (Δx, Δy)
-      formatted = formatted.replace(/\((\s*Δx\s*,\s*Δy\s*)\)/g, '$(\\Delta x, \\Delta y)$');
-
-      return formatted;
-    })
-    .join('');
+  return current;
 }
 
 export const MathText: React.FC<MathTextProps> = ({
@@ -120,7 +185,7 @@ export const MathText: React.FC<MathTextProps> = ({
   const parts = processedText.split(/(\$\$[\s\S]+?\$\$|\$[^\$]+?\$)/g);
 
   return (
-    <span className={`inline leading-relaxed ${className}`}>
+    <span className={`inline leading-relaxed whitespace-pre-line ${className}`}>
       {parts.map((part, index) => {
         if (!part) return null;
 
