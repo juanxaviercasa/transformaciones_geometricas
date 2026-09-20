@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MousePointer,
   Hexagon,
@@ -4030,46 +4031,24 @@ export function Workspace({
       )}
 
       {/* PÁGINA COMPLETA DE CUADERNO */}
-      {isNotebookOpen && (
-        <div className="fixed inset-0 z-50 bg-surface/95 backdrop-blur-sm overflow-hidden animate-in fade-in duration-150">
-          <div
-            className="h-full w-full flex flex-col"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Cuaderno de trabajo"
-          >
-            <div className="flex items-center justify-between border-b border-border bg-panel/90 px-4 py-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-accent" />
-                <span className="text-sm font-bold text-ink">Cuaderno</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsNotebookOpen(false)}
-                  className="flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/10 px-3 py-1.5 text-[11px] font-bold text-accent shadow-sm hover:bg-accent/15 transition"
-                >
-                  <ChevronRight className="h-3.5 w-3.5 rotate-180" />
-                  Volver a la pizarra
-                </button>
-                <button
-                  onClick={() => setIsNotebookOpen(false)}
-                  className="p-2 rounded-xl hover:bg-black/5"
-                  aria-label="Cerrar cuaderno"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 min-h-0">
+      {isNotebookOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-50 bg-surface flex flex-col overflow-hidden animate-in fade-in duration-150">
+            <div
+              className="h-full w-full flex flex-col"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Cuaderno de trabajo"
+            >
               <AlgebraicNotebook
                 engineResult={engineResult}
                 boardContext={notebookContext}
                 onClose={() => setIsNotebookOpen(false)}
               />
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* PÁGINA COMPLETA DE PROBLEMAS Y RUTA DE ESTUDIO */}
       {isProblemOpen && (

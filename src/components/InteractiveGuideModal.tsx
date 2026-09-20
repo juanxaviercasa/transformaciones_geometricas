@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   HelpCircle,
   X,
@@ -244,7 +245,7 @@ export const InteractiveGuideModal: React.FC<InteractiveGuideModalProps> = ({
 
   const activeStepData = steps[currentStep];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm p-4 animate-in fade-in duration-150">
       <div className="w-full max-w-2xl rounded-3xl bg-surface p-6 shadow-2xl border border-border flex flex-col space-y-4 max-h-[90vh]">
         {/* ENCABEZADO DE LA GUÍA */}
@@ -338,6 +339,7 @@ export const InteractiveGuideModal: React.FC<InteractiveGuideModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
