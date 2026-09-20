@@ -482,7 +482,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                       {t.label}
                     </div>
                     <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight truncate mt-0.5 font-medium">
-                      {t.tagline}
+                      <MathText text={t.tagline} />
                     </div>
                   </div>
                 </button>
@@ -524,7 +524,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                     {theory.label}
                   </h2>
                   <p className="text-slate-600 dark:text-slate-300 text-xs sm:text-sm font-semibold mt-0.5">
-                    {theory.tagline}
+                    <MathText text={theory.tagline} />
                   </p>
                 </div>
               </div>
@@ -573,7 +573,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                   >
                     <div>
                       <div className="text-xs sm:text-sm font-black uppercase tracking-wider mb-2 text-slate-900 dark:text-white flex items-center justify-between">
-                        <span>{f.title}</span>
+                        <span><MathText text={f.title} /></span>
                         <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
                           Regla
                         </span>
