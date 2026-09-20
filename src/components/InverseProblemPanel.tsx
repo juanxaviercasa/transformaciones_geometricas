@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Point, TransformationType, ProblemScenario } from '../types/geometry';
 import { analyzeInverseTransformation } from '../utils/GeometryProblemEngine';
+import { MathText } from './MathText';
 
 interface InverseProblemPanelProps {
   preimage: Point[];
@@ -78,7 +79,7 @@ export const InverseProblemPanel: React.FC<InverseProblemPanelProps> = ({
             Reto Planteado:
           </span>
           <p className="text-xs text-ink font-medium leading-relaxed">
-            {currentScenario.statement}
+            <MathText text={currentScenario.statement} />
           </p>
         </div>
       )}
@@ -151,7 +152,7 @@ export const InverseProblemPanel: React.FC<InverseProblemPanelProps> = ({
 
         {showHint && currentScenario?.inverseOptions?.hint && (
           <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed animate-in fade-in duration-150">
-            <strong>Pista del Profesor:</strong> {currentScenario.inverseOptions.hint}
+            <strong>Pista del Profesor:</strong> <MathText text={currentScenario.inverseOptions.hint} />
           </div>
         )}
       </div>
@@ -178,7 +179,7 @@ export const InverseProblemPanel: React.FC<InverseProblemPanelProps> = ({
           </p>
           {verificationResult.status === 'correct' && currentScenario?.inverseOptions?.explanation && (
             <div className="pt-2 border-t border-emerald-200/80 text-[11px] font-mono">
-              <strong>Solución Curricular:</strong> {currentScenario.inverseOptions.explanation}
+              <strong>Solución Curricular:</strong> <MathText text={currentScenario.inverseOptions.explanation} />
             </div>
           )}
         </div>

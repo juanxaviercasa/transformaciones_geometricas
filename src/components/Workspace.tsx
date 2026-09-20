@@ -67,6 +67,7 @@ import { AlgebraView } from './AlgebraView';
 import { AlgebraicNotebook } from './AlgebraicNotebook';
 import { InverseProblemPanel } from './InverseProblemPanel';
 import { TheoryPage } from './TheoryPage';
+import { StudyProblemsPage } from './StudyProblemsPage';
 import { InteractiveGuideModal } from './InteractiveGuideModal';
 import { PolygonPreview } from './PolygonPreview';
 import { SHAPE_PRESETS } from '../utils/transformations';
@@ -254,6 +255,40 @@ export function Workspace({
     setSelectedProblemTab('ejercicio');
     setStudySessionCount((prev) => prev + 1);
   }, []);
+
+  const handleLoadScenarioToBoard = useCallback((problem: ProblemScenario) => {
+    commitAction();
+    setCurrentScenario(problem);
+    if (problem.presetVertices && problem.presetVertices.length > 0) {
+      setVertices(problem.presetVertices);
+      const n = problem.presetVertices.length;
+      if (n >= 3) {
+        setIsPolygon(true);
+        const segs: [number, number][] = [];
+        for (let i = 0; i < n; i++) {
+          segs.push([i, (i + 1) % n]);
+        }
+        setSegments(segs);
+      } else if (n === 2) {
+        setIsPolygon(false);
+        setSegments([[0, 1]]);
+      } else {
+        setIsPolygon(false);
+        setSegments([]);
+      }
+    }
+    if (problem.targetConfig) {
+      setConfig(problem.targetConfig);
+    }
+    if (problem.mode) {
+      setProblemMode(problem.mode);
+    }
+    setIsProblemOpen(false);
+    setProjectToast({
+      message: `¡Problema cargado en la pizarra! Practica: ${problem.title}`,
+      type: 'success'
+    });
+  }, [commitAction]);
 
   const filteredProblemsByDifficulty = useMemo(() => {
     return (['básico', 'intermedio', 'avanzado'] as const).reduce((acc, difficulty) => {
@@ -4036,314 +4071,32 @@ export function Workspace({
         </div>
       )}
 
-      {/* PÁGINA COMPLETA DE PROBLEMAS */}
+      {/* PÁGINA COMPLETA DE PROBLEMAS Y RUTA DE ESTUDIO */}
       {isProblemOpen && (
-        <div className="fixed inset-0 z-50 bg-surface/95 backdrop-blur-sm overflow-hidden animate-in fade-in duration-150">
-          <div
-            className="h-full w-full flex flex-col"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Problemas de transformación"
-          >
-            <div className="flex items-center justify-between border-b border-border bg-panel/90 px-4 py-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-emerald-600" />
-                <span className="text-sm font-bold text-ink">Problemas</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {selectedProblemTab === 'ejercicio' && (
-                  <button
-                    onClick={() => setSelectedProblemTab('selector')}
-                    className="flex items-center gap-1.5 rounded-xl border-2 border-emerald-300 bg-emerald-50 px-3.5 py-2 text-[11px] font-black text-emerald-800 shadow-sm hover:bg-emerald-100 transition"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5 rotate-180" />
-                    Volver a la lista
-                  </button>
-                )}
-                <button
-                  onClick={() => setIsProblemOpen(false)}
-                  className="flex items-center gap-1.5 rounded-xl border-2 border-slate-300 bg-slate-900 px-3.5 py-2 text-[11px] font-black text-white shadow-sm hover:bg-slate-700 transition"
-                >
-                  <ChevronRight className="h-3.5 w-3.5 rotate-180" />
-                  Volver a la pizarra
-                </button>
-                <button
-                  onClick={() => setIsProblemOpen(false)}
-                  className="p-2 rounded-xl hover:bg-black/5"
-                  aria-label="Cerrar problemas"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {selectedProblemTab === 'selector' && (
-              <div className="flex items-center justify-between border-b border-border bg-emerald-50/60 px-4 py-2.5 text-xs text-emerald-800">
-                <span className="font-bold uppercase tracking-wide">Ruta de estudio</span>
-                <span className="text-[10px] font-semibold">Pizarra activa · {problemMode === 'DIRECT' ? 'Problema directo' : 'Problema inverso'}</span>
-              </div>
-            )}
-
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              {selectedProblemTab === 'selector' ? (
-                <div className="p-4 space-y-4">
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Selecciona una ruta de estudio</p>
-                    <p className="mt-1 text-[11px] text-emerald-700 leading-relaxed">
-                      Elige entre nivel básico, intermedio o avanzado para practicar la transformación en contexto.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-3 shadow-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Ruta de estudio</p>
-                        <p className="mt-1 text-sm font-black text-emerald-900">
-                          {studyMode === 'ruta' ? selectedProblemDifficulty : 'Repaso libre'}
-                        </p>
-                      </div>
-                      <div className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-black text-emerald-700">
-                        {completedProblemIds.length}/{CLASSROOM_PROBLEMS.length}
-                      </div>
-                    </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-emerald-100">
-                      <div
-                        className="h-full rounded-full bg-emerald-500 transition-all duration-300"
-                        style={{ width: `${Math.min(100, (completedProblemIds.length / Math.max(CLASSROOM_PROBLEMS.length, 1)) * 100)}%` }}
-                      />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wide">
-                      {levelOrder.map((level) => (
-                        <span
-                          key={level}
-                          className={`rounded-full border px-2 py-1 ${
-                            unlockedLevels[level]
-                              ? 'border-emerald-400 bg-emerald-100 text-emerald-800'
-                              : 'border-slate-200 bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          {level} {unlockedLevels[level] ? '· disponible' : '· bloqueado'}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <p className="text-[11px] leading-relaxed text-emerald-700">
-                        {nextStudySuggestion}
-                      </p>
-                      <button
-                        onClick={resetProblemProgress}
-                        className="rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-rose-700 transition hover:bg-rose-100"
-                      >
-                        Reiniciar avance
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-emerald-200 bg-white p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">Modo de práctica</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {(['ruta', 'libre'] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          onClick={() => setStudyMode(mode)}
-                          className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
-                            studyMode === mode
-                              ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                              : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          }`}
-                        >
-                          {mode === 'ruta' ? 'Ruta guiada' : 'Repaso libre'}
-                        </button>
-                      ))}
-                    </div>
-                    {studyMode === 'ruta' ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {(['básico', 'intermedio', 'avanzado'] as const).map((difficulty) => {
-                          const isLocked = !unlockedLevels[difficulty];
-                          return (
-                            <button
-                              key={difficulty}
-                              disabled={isLocked}
-                              onClick={() => setSelectedProblemDifficulty(difficulty)}
-                              className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
-                                selectedProblemDifficulty === difficulty
-                                  ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                                  : isLocked
-                                    ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                                    : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                              }`}
-                            >
-                              {difficulty}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setSelectedProblemType('todos')}
-                          className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
-                            selectedProblemType === 'todos'
-                              ? 'border-violet-500 bg-violet-500 text-white shadow-sm'
-                              : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                          }`}
-                        >
-                          Todos
-                        </button>
-                        {(['translation', 'reflection', 'rotation', 'central_reflection', 'homothety'] as const).map((type) => (
-                          <button
-                            key={type}
-                            onClick={() => setSelectedProblemType(type)}
-                            className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
-                              selectedProblemType === type
-                                ? 'border-violet-500 bg-violet-500 text-white shadow-sm'
-                                : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                            }`}
-                          >
-                            {type === 'translation' ? 'Traslación' : type === 'reflection' ? 'Reflexión' : type === 'rotation' ? 'Rotación' : type === 'central_reflection' ? 'Simetría central' : 'Homotecia'}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(['todos', 'translation', 'reflection', 'rotation', 'central_reflection', 'homothety'] as const).map((type) => (
-                        <button
-                          key={type}
-                          onClick={() => setSelectedProblemType(type)}
-                          className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition ${
-                            selectedProblemType === type
-                              ? 'border-violet-500 bg-violet-500 text-white shadow-sm'
-                              : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                          }`}
-                        >
-                          {type === 'todos' ? 'Todos' : type === 'translation' ? 'Traslación' : type === 'reflection' ? 'Reflexión' : type === 'rotation' ? 'Rotación' : type === 'central_reflection' ? 'Simetría central' : 'Homotecia'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <button
-                      onClick={() => setIsProblemOpen(false)}
-                      className="flex items-center gap-2 rounded-2xl border-2 border-slate-300 bg-slate-900 px-4 py-2.5 text-sm font-black text-white shadow-lg hover:bg-slate-700 transition"
-                    >
-                      <ChevronRight className="h-4 w-4 rotate-180" />
-                      Volver a la pizarra
-                    </button>
-                    <button
-                      onClick={() => handleGenerateRandomProblem(selectedProblemDifficulty)}
-                      className="flex items-center gap-2 rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800 shadow-sm hover:bg-emerald-100 transition"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      Generar problema aleatorio
-                    </button>
-                  </div>
-
-                  {(['básico', 'intermedio', 'avanzado'] as const).map((difficulty) => {
-                    const problems = filteredProblemsByDifficulty[difficulty];
-                    const isLocked = !unlockedLevels[difficulty];
-
-                    return (
-                      <div key={difficulty} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className={`text-xs font-bold uppercase tracking-wide ${isLocked ? 'text-slate-400' : 'text-ink-soft'}`}>
-                            {difficulty}
-                          </span>
-                          <span className="text-[10px] text-ink-faint">{isLocked ? 'bloqueado' : `${problems.length} retos`}</span>
-                        </div>
-                        <div className="grid gap-2">
-                          {isLocked ? (
-                            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-500">
-                              Completa primero los ejercicios del nivel anterior para desbloquear este reto.
-                            </div>
-                          ) : problems.length === 0 ? (
-                            <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/40 p-3 text-[11px] text-emerald-700">
-                              No hay ejercicios de este nivel con el tipo de transformación actual.
-                            </div>
-                          ) : (
-                            problems.map((prob) => {
-                              const isCompleted = completedProblemIds.includes(prob.id);
-                              return (
-                                <button
-                                  key={prob.id}
-                                  onClick={() => openScenario(prob)}
-                                  className="w-full text-left rounded-2xl border border-border bg-panel p-3 hover:border-emerald-400 hover:bg-emerald-50/50 transition"
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-sm font-bold text-ink">{prob.title}</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                                      isCompleted ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-50 text-emerald-700'
-                                    }`}>{isCompleted ? 'resuelto' : prob.category}</span>
-                                  </div>
-                                  <p className="mt-1 text-[11px] text-ink-soft leading-relaxed">{prob.statement}</p>
-                                </button>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="p-4">
-                  <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide font-bold text-emerald-800">Ejercicio activo</p>
-                        <p className="text-sm font-bold text-emerald-900">{currentScenario?.title || 'Problema sin título'}</p>
-                      </div>
-                      <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                        {currentScenario?.difficulty || 'general'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mb-4 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => setSelectedProblemTab('selector')}
-                      className="flex items-center gap-2 rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800 shadow-sm hover:bg-emerald-100 transition"
-                    >
-                      <ChevronRight className="h-4 w-4 rotate-180" />
-                      Volver a la lista
-                    </button>
-                    <button
-                      onClick={markCurrentProblemAsCompleted}
-                      className="flex items-center gap-2 rounded-2xl border-2 border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-800 shadow-sm hover:bg-emerald-100 transition"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Marcar como resuelto
-                    </button>
-                    <button
-                      onClick={() => handleGenerateRandomProblem(studyMode === 'ruta' ? selectedProblemDifficulty : 'todos')}
-                      className="flex items-center gap-2 rounded-2xl border-2 border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-black text-violet-800 shadow-sm hover:bg-violet-100 transition"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      Otro problema
-                    </button>
-                    <button
-                      onClick={() => setIsProblemOpen(false)}
-                      className="flex items-center gap-2 rounded-2xl border-2 border-slate-300 bg-slate-900 px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-slate-700 transition"
-                    >
-                      <ChevronRight className="h-4 w-4 rotate-180" />
-                      Volver a la pizarra
-                    </button>
-                  </div>
-                  {currentScenario && (
-                    <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-800">
-                      <span className="font-black uppercase tracking-wide">Progreso:</span>{' '}
-                      {completedProblemIds.includes(currentScenario.id) ? 'Este ejercicio ya está resuelto y desbloquea el siguiente nivel.' : 'Completa este ejercicio para avanzar al siguiente nivel.'}
-                    </div>
-                  )}
-                  <InverseProblemPanel
-                    preimage={vertices}
-                    image={transformedVertices}
-                    currentScenario={currentScenario}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <StudyProblemsPage
+          isOpen={isProblemOpen}
+          onClose={() => setIsProblemOpen(false)}
+          studyMode={studyMode}
+          onSetStudyMode={setStudyMode}
+          selectedProblemDifficulty={selectedProblemDifficulty}
+          onSetSelectedProblemDifficulty={setSelectedProblemDifficulty}
+          selectedProblemType={selectedProblemType}
+          onSetSelectedProblemType={setSelectedProblemType}
+          completedProblemIds={completedProblemIds}
+          onResetProgress={resetProblemProgress}
+          unlockedLevels={unlockedLevels}
+          nextStudySuggestion={nextStudySuggestion}
+          onGenerateRandomProblem={handleGenerateRandomProblem}
+          onOpenScenario={openScenario}
+          onLoadScenarioToBoard={handleLoadScenarioToBoard}
+          selectedProblemTab={selectedProblemTab}
+          onSetSelectedProblemTab={setSelectedProblemTab}
+          currentScenario={currentScenario}
+          onMarkCurrentProblemAsCompleted={markCurrentProblemAsCompleted}
+          problemMode={problemMode}
+          preimage={vertices}
+          image={transformedVertices}
+        />
       )}
 
       {/* NOTIFICACIÓN TOAST FLOTANTE AL CARGAR O GUARDAR PROYECTO */}
