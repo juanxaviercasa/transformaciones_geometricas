@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { ProblemScenario, ProblemMode } from '../types/geometry';
 import { CLASSROOM_PROBLEMS } from '../utils/GeometryProblemEngine';
+import { MathText } from './MathText';
 
 interface ClassroomBannerProps {
   currentScenario: ProblemScenario | null;
@@ -120,7 +121,7 @@ export const ClassroomBanner: React.FC<ClassroomBannerProps> = ({
             ) : (
               <div className="flex items-center justify-between w-full min-w-0">
                 <p className="text-xs font-medium text-ink truncate cursor-pointer" onClick={() => setIsEditing(true)}>
-                  {customStatement || 'Haz clic para escribir o seleccionar el enunciado del problema...'}
+                  <MathText text={customStatement || 'Haz clic para escribir o seleccionar el enunciado del problema...'} />
                 </p>
                 <button
                   onClick={() => {
@@ -223,7 +224,7 @@ export const ClassroomBanner: React.FC<ClassroomBannerProps> = ({
                   className="w-full text-left p-2.5 rounded-xl bg-panel hover:bg-accent/5 hover:border-accent border border-border transition group"
                 >
                   <div className="flex items-center justify-between gap-2 text-xs font-bold text-ink group-hover:text-accent">
-                    <span>{prob.title}</span>
+                    <span><MathText text={prob.title} /></span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface text-accent font-semibold whitespace-nowrap">
                       {prob.difficulty || 'general'}
                     </span>

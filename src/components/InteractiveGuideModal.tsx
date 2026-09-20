@@ -17,6 +17,7 @@ import {
   Sparkles,
   BookOpen
 } from 'lucide-react';
+import { MathText } from './MathText';
 
 interface InteractiveGuideModalProps {
   isOpen: boolean;
@@ -86,35 +87,40 @@ export const InteractiveGuideModal: React.FC<InteractiveGuideModalProps> = ({
             <div className="p-2.5 rounded-xl bg-panel border border-border flex items-start gap-2.5">
               <FlipHorizontal className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-ink">Simetría Axial (Reflexión):</strong> Refleja respecto a los ejes coordenados (Eje X, Eje Y), diagonales ($y = x$, $y = -x$) o cualquier recta vertical ($x = k$) u horizontal ($y = k$).
+                <strong className="text-ink">Simetría Axial (Reflexión): </strong>
+                <MathText text="Refleja respecto a los ejes coordenados (Eje X, Eje Y), diagonales ($y = x$, $y = -x$) o cualquier recta vertical ($x = k$) u horizontal ($y = k$)." />
               </div>
             </div>
 
             <div className="p-2.5 rounded-xl bg-panel border border-border flex items-start gap-2.5">
               <Move className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-ink">Traslación:</strong> Ajusta los deslizadores del vector director <code>v = (Δx, Δy)</code> en el panel lateral.
+                <strong className="text-ink">Traslación: </strong>
+                <MathText text="Ajusta los deslizadores del vector director $\vec{v} = (\Delta x, \Delta y)$ en el panel lateral." />
               </div>
             </div>
 
             <div className="p-2.5 rounded-xl bg-panel border border-border flex items-start gap-2.5">
               <RotateCw className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-ink">Rotación:</strong> Elige el ángulo $\alpha$ (90°, 180°, etc.), el sentido (horario o antihorario) y arrastra el centro de giro $C$ sobre la pizarra.
+                <strong className="text-ink">Rotación: </strong>
+                <MathText text="Elige el ángulo $\alpha$ (90°, 180°, etc.), el sentido (horario o antihorario) y arrastra el centro de giro $C$ sobre la pizarra." />
               </div>
             </div>
 
             <div className="p-2.5 rounded-xl bg-panel border border-border flex items-start gap-2.5">
               <Target className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-ink">Simetría Central:</strong> Refleja respecto a un punto $O(h, k)$. Cada punto y su imagen tienen a $O$ como punto medio exacto.
+                <strong className="text-ink">Simetría Central: </strong>
+                <MathText text="Refleja respecto a un punto $O(h, k)$. Cada punto y su imagen tienen a $O$ como punto medio exacto." />
               </div>
             </div>
 
             <div className="p-2.5 rounded-xl bg-panel border border-border flex items-start gap-2.5">
               <Maximize2 className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-ink">Homotecia:</strong> Escala la figura por un factor k. Si k &gt; 0 es directa; si k &lt; 0 se invierte respecto al centro O.
+                <strong className="text-ink">Homotecia: </strong>
+                <MathText text="Escala la figura por un factor $k$. Si $k > 0$ es directa; si $k < 0$ se invierte respecto al centro $O$." />
               </div>
             </div>
           </div>
@@ -132,16 +138,18 @@ export const InteractiveGuideModal: React.FC<InteractiveGuideModalProps> = ({
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
             <div className="p-3 rounded-2xl bg-panel border border-border space-y-1">
-              <div className="font-bold text-rose-700">Ángulos Rectos y Congruencia (≅)</div>
+              <div className="font-bold text-rose-700">
+                <MathText text="Ángulos Rectos y Congruencia ($\cong$)" />
+              </div>
               <p className="text-ink-soft text-[11px]">
-                En la simetría axial se trazan los segmentos perpendiculares con el símbolo de 90° en el pie de la perpendicular y marcas de congruencia de distancia demostrando que la recta es la mediatriz.
+                <MathText text="En la simetría axial se trazan los segmentos perpendiculares con el símbolo de $90^\circ$ en el pie de la perpendicular y marcas de congruencia de distancia demostrando que la recta es la mediatriz." />
               </p>
             </div>
 
             <div className="p-3 rounded-2xl bg-panel border border-border space-y-1">
               <div className="font-bold text-blue-700">Descomposición Vectorial</div>
               <p className="text-ink-soft text-[11px]">
-                En la traslación se dibujan triángulos rectángulos que descomponen el movimiento en su cateto horizontal $\Delta x$ y su cateto vertical $\Delta y$.
+                <MathText text="En la traslación se dibujan triángulos rectángulos que descomponen el movimiento en su cateto horizontal $\Delta x$ y su cateto vertical $\Delta y$." />
               </p>
             </div>
 
@@ -175,16 +183,20 @@ export const InteractiveGuideModal: React.FC<InteractiveGuideModalProps> = ({
             <div className="font-bold text-xs">Estructura del Cuaderno:</div>
             <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-emerald-900">
               <li>
-                <strong>Fórmula General:</strong> Expresión algebraica teórica correspondiente al tipo de transformación.
+                <strong>Fórmula General: </strong>
+                <MathText text="Expresión algebraica teórica correspondiente al tipo de transformación." />
               </li>
               <li>
-                <strong>Sustitución Vértice por Vértice:</strong> Reemplazo aritmético paso a paso con paréntesis y signos negativos para $A, B, C...$.
+                <strong>Sustitución Vértice por Vértice: </strong>
+                <MathText text="Reemplazo aritmético paso a paso con paréntesis y signos negativos para $A, B, C\dots$." />
               </li>
               <li>
-                <strong>Conjunto Solución:</strong> Lista ordenada de los nuevos pares ordenados calculados $A', B', C'...$.
+                <strong>Conjunto Solución: </strong>
+                <MathText text="Lista ordenada de los nuevos pares ordenados calculados $A', B', C'\dots$." />
               </li>
               <li>
-                <strong>Propiedades Invariantes:</strong> Clasificación isométrica, distancias, ángulos y orientación.
+                <strong>Propiedades Invariantes: </strong>
+                Clasificación isométrica, distancias, ángulos y orientación.
               </li>
             </ol>
           </div>
@@ -214,7 +226,7 @@ export const InteractiveGuideModal: React.FC<InteractiveGuideModalProps> = ({
             <div className="p-3 rounded-2xl bg-panel border border-border space-y-1">
               <strong className="text-ink">Pestaña Problemas (Deducción Inversa):</strong>
               <p className="text-ink-soft text-[11px]">
-                Muestra dos figuras $F$ y $F'$ para que los alumnos deduzcan qué transformación se aplicó (calcular vector, mediatriz, centro o razón $k$) y presionen <em>"Comprobar Deducción"</em> con retroalimentación inmediata.
+                <MathText text="Muestra dos figuras $F$ y $F'$ para que los alumnos deduzcan qué transformación se aplicó (calcular vector, mediatriz, centro o razón $k$) y presionen Comprobar Deducción con retroalimentación inmediata." />
               </p>
             </div>
 

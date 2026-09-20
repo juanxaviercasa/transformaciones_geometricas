@@ -18,6 +18,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { MathText } from "./MathText";
 
 interface TheoryPageProps {
   initialTransformation?: TransformationType;
@@ -528,7 +529,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                 </div>
               </div>
               <p className="text-slate-700 dark:text-slate-200 leading-relaxed text-xs sm:text-sm mt-4 font-normal">
-                {theory.definition}
+                <MathText text={theory.definition} />
               </p>
             </div>
 
@@ -579,11 +580,11 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                       </div>
 
                       {/* HIGH-CONTRAST FORMULA DISPLAY: Dark Slate Terminal with Luminous Emerald Text */}
-                      <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 my-2.5 shadow-inner flex items-center justify-between">
-                        <code className="block font-mono text-[14px] sm:text-[15px] font-black text-emerald-300 tracking-wide select-all">
-                          {f.formula}
-                        </code>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden xs:inline">
+                      <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 my-2.5 shadow-inner flex items-center justify-between overflow-x-auto">
+                        <div className="text-emerald-300 font-bold text-sm sm:text-base select-all">
+                          <MathText text={f.formula} />
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden xs:inline shrink-0 ml-3">
                           Fórmula
                         </span>
                       </div>
@@ -591,7 +592,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
 
                     <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed font-semibold pt-1 flex items-start gap-1.5">
                       <span className="text-slate-400">↳</span>
-                      <span>{f.note}</span>
+                      <MathText text={f.note} />
                     </p>
                   </div>
                 ))}
@@ -613,7 +614,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                       className="flex items-start gap-3 text-xs sm:text-sm font-bold text-emerald-950 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800/80 shadow-2xs"
                     >
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                      <span>{inv}</span>
+                      <span><MathText text={inv} /></span>
                     </li>
                   ))}
                 </ul>
@@ -632,7 +633,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                       className="flex items-start gap-3 text-xs sm:text-sm font-bold text-indigo-950 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-950/30 p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-800/80 shadow-2xs"
                     >
                       <ChevronRight className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                      <span>{p}</span>
+                      <span><MathText text={p} /></span>
                     </li>
                   ))}
                 </ul>
@@ -653,7 +654,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                   >
                     <div className="px-4 sm:px-5 py-3 font-black text-xs sm:text-sm bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white flex items-center justify-between">
                       <span>
-                        Ejemplo {i + 1}: {ex.title}
+                        Ejemplo {i + 1}: <MathText text={ex.title} />
                       </span>
                       <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Paso a Paso
@@ -666,7 +667,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                             {j + 1}
                           </span>
                           <span className="text-slate-800 dark:text-slate-200 text-xs sm:text-sm leading-relaxed font-semibold">
-                            {step}
+                            <MathText text={step} />
                           </span>
                         </li>
                       ))}
@@ -687,7 +688,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                   <div key={i} className="flex items-start gap-3">
                     <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                     <span className="text-amber-950 dark:text-amber-100 text-xs sm:text-sm font-bold leading-relaxed">
-                      {err}
+                      <MathText text={err} />
                     </span>
                   </div>
                 ))}
@@ -705,7 +706,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({
                     Consejo Nemotécnico Para Recordar
                   </span>
                   <p className="text-slate-100 text-xs sm:text-sm leading-relaxed font-semibold">
-                    {theory.mnemonic}
+                    <MathText text={theory.mnemonic} />
                   </p>
                 </div>
               </div>

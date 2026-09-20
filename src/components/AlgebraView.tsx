@@ -9,6 +9,7 @@ import {
   formatNum,
   distance
 } from '../utils/GeometryProblemEngine';
+import { MathText } from './MathText';
 import {
   Target,
   Sliders,
@@ -782,7 +783,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
                       : 'bg-surface text-ink border-border hover:border-border-strong'
                   }`}
                 >
-                  {label}
+                  <MathText text={label} />
                 </button>
               ))}
             </div>
@@ -874,8 +875,8 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
                     className="w-16 text-center font-bold text-rose-600 bg-surface border border-rose-300 rounded-lg px-1 py-0.5 text-xs outline-none focus:ring-2 focus:ring-rose-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
-                <div className="px-2 py-1.5 rounded-lg bg-surface border border-border text-[10px] font-mono text-ink-soft">
-                  {formatNum(config.generalLine.a)}x {config.generalLine.b >= 0 ? '+' : '-'} {formatNum(Math.abs(config.generalLine.b))}y {config.generalLine.c >= 0 ? '+' : '-'} {formatNum(Math.abs(config.generalLine.c))} = 0
+                <div className="px-2 py-1.5 rounded-lg bg-surface border border-border text-[10px] text-ink-soft">
+                  <MathText text={`${formatNum(config.generalLine.a)}x ${config.generalLine.b >= 0 ? '+' : '-'} ${formatNum(Math.abs(config.generalLine.b))}y ${config.generalLine.c >= 0 ? '+' : '-'} ${formatNum(Math.abs(config.generalLine.c))} = 0`} />
                 </div>
               </div>
             )}
@@ -886,7 +887,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
           <div className="p-3 rounded-xl bg-panel border border-border space-y-3 font-mono text-xs">
             <div className="flex justify-between items-center font-semibold text-amber-600">
               <span className="flex items-center gap-1.5 font-sans font-bold text-ink">
-                <RotateCw className="h-3.5 w-3.5 text-amber-600" /> Ángulo de Giro (α):
+                <RotateCw className="h-3.5 w-3.5 text-amber-600" /> <MathText text="Ángulo de Giro ($\alpha$):" />
               </span>
               <span className="text-sm font-bold bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-300 text-amber-900 shadow-sm">
                 {config.angleDeg}°
@@ -1032,7 +1033,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
           return (
             <div className="p-3 rounded-xl bg-panel border border-border space-y-2 font-mono text-xs">
               <div className="flex justify-between font-semibold text-purple-600">
-                <span>Razón k:</span>
+                <span><MathText text="Razón $k$:" /></span>
                 <span>{config.scaleFactor.toFixed(2)}x</span>
               </div>
 
@@ -1072,7 +1073,7 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
                           : 'border-purple-200 bg-purple-100 text-purple-700 hover:border-purple-400'
                       }`}
                     >
-                      {example.label}
+                      <MathText text={example.label} />
                     </button>
                   ))}
                 </div>

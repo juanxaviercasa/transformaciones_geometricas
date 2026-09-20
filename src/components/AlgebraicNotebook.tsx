@@ -10,6 +10,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { ProblemEngineResult } from '../types/geometry';
+import { MathText } from './MathText';
 
 interface NotebookBoardContext {
   typeLabel: string;
@@ -99,7 +100,7 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
                 </span>
               </div>
               <p className="mt-2 text-[13px] leading-relaxed text-ink-soft">
-                {boardContext.summary}
+                <MathText text={boardContext.summary} />
               </p>
             </div>
 
@@ -107,7 +108,7 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
               {boardContext.parameters.map((param, index) => (
                 <div key={index} className="flex items-center gap-2 text-[13px] text-ink-soft">
                   <ArrowRight className="h-3.5 w-3.5 text-accent shrink-0" />
-                  <span>{param}</span>
+                  <span><MathText text={param} /></span>
                 </div>
               ))}
             </div>
@@ -117,7 +118,7 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
                 Explicación para el estudiante
               </div>
               <p className="text-[13px] leading-relaxed text-ink-soft">
-                {boardContext.studentExplanation}
+                <MathText text={boardContext.studentExplanation} />
               </p>
             </div>
           </div>
@@ -136,30 +137,32 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
             <div className="p-4 rounded-2xl border border-border bg-panel">
               <div className="text-[11px] uppercase tracking-[0.12em] text-accent font-bold mb-2">1. Observa</div>
               <p className="text-[13px] leading-relaxed text-ink-soft">
-                {boardContext?.summary || 'La figura cambia de posición o forma según la transformación elegida; se mantiene una relación clara entre cada punto original y su imagen.'}
+                <MathText text={boardContext?.summary || 'La figura cambia de posición o forma según la transformación elegida; se mantiene una relación clara entre cada punto original y su imagen.'} />
               </p>
             </div>
 
             <div className="p-4 rounded-2xl border border-border bg-panel">
               <div className="text-[11px] uppercase tracking-[0.12em] text-accent font-bold mb-2">2. Formula</div>
               <p className="text-[13px] leading-relaxed text-ink-soft">
-                {boardContext?.studentExplanation || 'La regla general permite escribir la imagen de cualquier punto sin depender solo del dibujo.'}
+                <MathText text={boardContext?.studentExplanation || 'La regla general permite escribir la imagen de cualquier punto sin depender solo del dibujo.'} />
               </p>
             </div>
 
             <div className="p-4 rounded-2xl border border-border bg-panel">
               <div className="text-[11px] uppercase tracking-[0.12em] text-accent font-bold mb-2">3. Verifica</div>
               <p className="text-[13px] leading-relaxed text-ink-soft">
-                {firstStep
-                  ? `Comprobamos con un punto concreto: ${firstStep.vertexName}(${firstStep.originalPoint.x}, ${firstStep.originalPoint.y}) → ${firstStep.resultLine}.`
-                  : 'Se sustituye un punto real en la fórmula para comprobar si la transformación es coherente.'}
+                {firstStep ? (
+                  <MathText text={`Comprobamos con un punto concreto: ${firstStep.vertexName}(${firstStep.originalPoint.x}, ${firstStep.originalPoint.y}) → ${firstStep.resultLine}.`} />
+                ) : (
+                  'Se sustituye un punto real en la fórmula para comprobar si la transformación es coherente.'
+                )}
               </p>
             </div>
 
             <div className="p-4 rounded-2xl border border-border bg-panel">
               <div className="text-[11px] uppercase tracking-[0.12em] text-accent font-bold mb-2">4. Concluye</div>
               <p className="text-[13px] leading-relaxed text-ink-soft">
-                {geometricProperties.pedagogicalNotes || 'La figura conserva o modifica propiedades específicas según la transformación; eso es lo que explica el comportamiento del plano.'}
+                <MathText text={geometricProperties.pedagogicalNotes || 'La figura conserva o modifica propiedades específicas según la transformación; eso es lo que explica el comportamiento del plano.'} />
               </p>
             </div>
           </div>
@@ -174,8 +177,8 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
               Regla
             </span>
           </div>
-          <div className="p-3 rounded-xl bg-surface border border-accent/20 font-mono text-[13px] text-accent font-semibold whitespace-pre-wrap shadow-inner">
-            {boardContext?.formula || generalFormula}
+          <div className="p-3 rounded-xl bg-surface border border-accent/20 text-accent font-semibold shadow-inner overflow-x-auto">
+            <MathText text={boardContext?.formula || generalFormula} displayMode />
           </div>
         </div>
 
@@ -188,13 +191,13 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
               </span>
             </div>
             <div className="rounded-xl bg-surface border border-border p-3 space-y-1.5">
-              <div className="font-mono text-[13px] text-accent font-semibold">
-                {firstStep.vertexName}({firstStep.originalPoint.x}, {firstStep.originalPoint.y}) → {firstStep.resultLine}
+              <div className="text-[13px] text-accent font-semibold">
+                <MathText text={`${firstStep.vertexName}(${firstStep.originalPoint.x}, ${firstStep.originalPoint.y}) → ${firstStep.resultLine}`} />
               </div>
               <div className="space-y-1.5">
                 {firstStep.substitutionLines.map((line, idx) => (
-                  <div key={idx} className="font-mono text-[12px] text-ink-soft bg-panel/80 rounded-lg px-2.5 py-1.5 border border-border/60">
-                    {line}
+                  <div key={idx} className="text-[12px] text-ink-soft bg-panel/80 rounded-lg px-2.5 py-1.5 border border-border/60">
+                    <MathText text={line} />
                   </div>
                 ))}
               </div>
@@ -215,26 +218,26 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
                 className="p-4 rounded-2xl border border-border bg-panel/70 hover:border-border-strong transition space-y-2.5"
               >
                 <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-1.5">
-                  <span className="font-bold font-mono text-emerald-700 text-[13px]">
-                    Vértice {step.vertexName}({step.originalPoint.x}, {step.originalPoint.y})
+                  <span className="font-bold text-emerald-700 text-[13px]">
+                    <MathText text={`Vértice ${step.vertexName}(${step.originalPoint.x}, ${step.originalPoint.y})`} />
                   </span>
-                  <span className="font-mono text-[12px] text-ink-soft">
-                    ➜ {step.resultLine}
+                  <span className="text-[12px] text-ink-soft">
+                    <MathText text={`➜ ${step.resultLine}`} />
                   </span>
                 </div>
 
-                <div className="space-y-1.5 pl-1 font-mono text-[13px] text-ink">
+                <div className="space-y-1.5 pl-1 text-[13px] text-ink">
                   {step.substitutionLines.map((line, lIdx) => (
                     <div key={lIdx} className="leading-relaxed bg-surface/80 px-2.5 py-1.5 rounded-lg border border-border/40">
-                      {line}
+                      <MathText text={line} />
                     </div>
                   ))}
                 </div>
 
                 <div className="flex justify-end pt-1">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 font-mono font-bold text-[12px] border border-emerald-200">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                    {step.resultLine}
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 font-bold text-[12px] border border-emerald-200">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <MathText text={step.resultLine} />
                   </span>
                 </div>
               </div>
@@ -250,10 +253,14 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
             {transformedVertices.map((v, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between p-2.5 rounded-xl bg-surface border border-border font-mono text-[13px]"
+                className="flex items-center justify-between p-2.5 rounded-xl bg-surface border border-border text-[13px]"
               >
-                <span className="font-bold text-accent">{v.label || `P${i + 1}'`}:</span>
-                <span className="font-semibold text-ink">({v.x}, {v.y})</span>
+                <span className="font-bold text-accent">
+                  <MathText text={v.label || `P${i + 1}'`} />:
+                </span>
+                <span className="font-semibold text-ink">
+                  <MathText text={`(${v.x}, ${v.y})`} />
+                </span>
               </div>
             ))}
           </div>
@@ -271,17 +278,17 @@ export const AlgebraicNotebook: React.FC<AlgebraicNotebookProps> = ({
           {expandedProperties && (
             <div className="space-y-2.5 pt-1">
               <div className="p-2.5 rounded-xl bg-surface border border-border text-[13px] text-ink font-medium">
-                {geometricProperties.isometryType}
+                <MathText text={geometricProperties.isometryType} />
               </div>
               <ul className="space-y-1.5 list-disc list-inside text-[13px] text-ink-soft">
                 {geometricProperties.invariants.map((inv, idx) => (
                   <li key={idx} className="leading-relaxed">
-                    {inv}
+                    <MathText text={inv} />
                   </li>
                 ))}
               </ul>
               <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[13px] leading-relaxed">
-                <strong>Nota:</strong> {geometricProperties.pedagogicalNotes}
+                <strong>Nota: </strong><MathText text={geometricProperties.pedagogicalNotes} />
               </div>
             </div>
           )}

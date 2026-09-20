@@ -175,7 +175,7 @@ export const InverseProblemPanel: React.FC<InverseProblemPanelProps> = ({
             <span>{verificationResult.message}</span>
           </div>
           <p className="text-[11px] leading-relaxed opacity-90">
-            {verificationResult.details}
+            <MathText text={verificationResult.details} />
           </p>
           {verificationResult.status === 'correct' && currentScenario?.inverseOptions?.explanation && (
             <div className="pt-2 border-t border-emerald-200/80 text-[11px] font-mono">
