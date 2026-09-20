@@ -47,25 +47,25 @@ const THEORIES: Theory[] = [
     label: "Simetría Axial",
     icon: FlipHorizontal,
     colorAccent: "#e11d48",
-    tagline: "Reflejo especular respecto a una recta L",
+    tagline: "Reflejo especular respecto a una recta $L$",
     definition:
-      "La simetría axial es una transformación isométrica que asigna a cada punto P su imagen P' de modo que la recta L (eje de simetría) es la mediatriz del segmento PP'. Esto significa que L es perpendicular a PP' y su punto medio pertenece a L.",
+      "La simetría axial es una transformación isométrica que asigna a cada punto $P$ su imagen $P'$ de modo que la recta $L$ (eje de simetría) es la mediatriz del segmento $PP'$. Esto significa que $L$ es perpendicular a $PP'$ y su punto medio pertenece a $L$.",
     invariants: [
       "Distancias entre puntos (isometría)",
       "Ángulos internos de la figura",
       "Áreas y perímetros",
-      "La recta L y todos sus puntos quedan fijos",
+      "La recta $L$ y todos sus puntos quedan fijos",
     ],
     formulas: [
       {
         title: "Eje X",
         formula: "P(x, y) → P'(x, -y)",
-        note: "Se invierte el signo de y",
+        note: "Se invierte el signo de $y$",
       },
       {
         title: "Eje Y",
         formula: "P(x, y) → P'(-x, y)",
-        note: "Se invierte el signo de x",
+        note: "Se invierte el signo de $x$",
       },
       {
         title: "y = x",
@@ -92,45 +92,45 @@ const THEORIES: Theory[] = [
       "Isometría: conserva distancias y ángulos",
       "Invierte la orientación de la figura (antidirecta)",
       "Aplicada dos veces consecutivas = identidad",
-      "El eje L es el único conjunto de puntos invariantes",
+      "El eje $L$ es el único conjunto de puntos invariantes",
       "Dos reflexiones con ejes paralelos = traslación",
       "Dos reflexiones con ejes secantes = rotación",
     ],
     examples: [
       {
-        title: "A(3, 2) respecto al Eje X",
+        title: "$A(3, 2)$ respecto al Eje X",
         steps: [
-          "Eje X: P(x, y) → P'(x, -y)",
-          "A(3, 2) → A'(3, -2)",
-          "Verificación: punto medio de A y A' = (3, 0), que pertenece al Eje X ✓",
+          "Eje X: $P(x, y) → P'(x, -y)$",
+          "$A(3, 2) → A'(3, -2)$",
+          "Verificación: punto medio de $A$ y $A' = (3, 0)$, que pertenece al Eje X ✓",
         ],
       },
       {
-        title: "B(-1, 4) respecto a x = 2",
+        title: "$B(-1, 4)$ respecto a $x = 2$",
         steps: [
-          "Fórmula: P'(2k - x, y) con k = 2",
-          "x' = 2(2) - (-1) = 5,  y' = 4",
-          "B'(5, 4)",
-          "Punto medio: ((-1 + 5)/2, 4) = (2, 4) → x = 2 ✓",
+          "Fórmula: $P'(2k - x, y)$ con $k = 2$",
+          "Sustitución: $x' = 2(2) - (-1) = 5$, $y' = 4$",
+          "$B'(5, 4)$",
+          "Punto medio: $\\left(\\frac{-1 + 5}{2}, 4\\right) = (2, 4) \\implies x = 2$ ✓",
         ],
       },
     ],
     commonErrors: [
       "Confundir simetría axial (recta) con simetría central (punto)",
-      "Para x = k: aplicar -x en vez de 2k - x",
+      "Para $x = k$: aplicar $-x$ en vez de $2k - x$",
       "Olvidar que la orientación de la figura se invierte",
     ],
     mnemonic:
-      "El eje L es un espejo perfecto: la imagen queda al otro lado a la misma distancia perpendicular, como un reflejo en agua calma.",
+      "El eje $L$ es un espejo perfecto: la imagen queda al otro lado a la misma distancia perpendicular, como un reflejo en agua calma.",
   },
   {
     id: "translation",
     label: "Traslación",
     icon: Move,
     colorAccent: "#2563eb",
-    tagline: "Desplazamiento uniforme según vector v = (dx, dy)",
+    tagline: "Desplazamiento uniforme según vector $\\vec{v} = (dx, dy)$",
     definition:
-      "Una traslación desplaza todos los puntos del plano la misma distancia y en la misma dirección, definida por el vector v = (dx, dy). Es una isometría directa sin puntos fijos (salvo vector nulo).",
+      "Una traslación desplaza todos los puntos del plano la misma distancia y en la misma dirección, definida por el vector $\\vec{v} = (dx, dy)$. Es una isometría directa sin puntos fijos (salvo vector nulo).",
     invariants: [
       "Distancias entre puntos",
       "Ángulos internos",
@@ -153,29 +153,29 @@ const THEORIES: Theory[] = [
       "Isometría directa: conserva distancias, ángulos y orientación",
       "No tiene puntos fijos (salvo traslación nula)",
       "Las rectas imagen son paralelas a las rectas originales",
-      "Es conmutativa: T(v1) ∘ T(v2) = T(v2) ∘ T(v1)",
-      "Composición de dos traslaciones = traslación con vector suma (v1 + v2)",
+      "Es conmutativa: $T(\\vec{v}_1) \\circ T(\\vec{v}_2) = T(\\vec{v}_2) \\circ T(\\vec{v}_1)$",
+      "Composición de dos traslaciones = traslación con vector suma $(\\vec{v}_1 + \\vec{v}_2)$",
     ],
     examples: [
       {
-        title: "A(2, -1) con vector v = (3, 4)",
+        title: "$A(2, -1)$ con vector $\\vec{v} = (3, 4)$",
         steps: [
-          "Fórmula: A'(x + dx, y + dy)",
-          "A'(2 + 3, -1 + 4) = A'(5, 3)",
-          "Distancia recorrida: |v| = √(3² + 4²) = 5 unidades ✓",
+          "Fórmula: $A'(x + dx, y + dy)$",
+          "$A'(2 + 3, -1 + 4) = A'(5, 3)$",
+          "Distancia recorrida: $|\\vec{v}| = \\sqrt{3^2 + 4^2} = 5$ unidades ✓",
         ],
       },
       {
-        title: "Triángulo A(0,0), B(4,0), C(2,3) con v = (-1, 2)",
+        title: "Triángulo $A(0,0), B(4,0), C(2,3)$ con $\\vec{v} = (-1, 2)$",
         steps: [
-          "A'(-1, 2),  B'(3, 2),  C'(1, 5)",
+          "$A'(-1, 2),  B'(3, 2),  C'(1, 5)$",
           "Todos los lados conservan exactamente su longitud original ✓",
         ],
       },
     ],
     commonErrors: [
       "Aplicar el vector solo a algunos vértices de la figura",
-      "Sumar dx a y, o dy a x (intercambiar componentes)",
+      "Sumar $dx$ a $y$, o $dy$ a $x$ (intercambiar componentes)",
       "Creer que la figura rota: en la traslación pura solo hay desplazamiento lineal",
     ],
     mnemonic:
@@ -186,20 +186,20 @@ const THEORIES: Theory[] = [
     label: "Rotación",
     icon: RotateCw,
     colorAccent: "#d97706",
-    tagline: "Giro de ángulo α alrededor de un centro fijo C",
+    tagline: "Giro de ángulo $\\alpha$ alrededor de un centro fijo $C$",
     definition:
-      "Una rotación hace girar todos los puntos un ángulo α (positivo = antihorario, negativo = horario) alrededor del centro C. Es la única isometría directa con exactamente un punto fijo: el centro de rotación.",
+      "Una rotación hace girar todos los puntos un ángulo $\\alpha$ (positivo = antihorario, negativo = horario) alrededor del centro $C$. Es la única isometría directa con exactamente un punto fijo: el centro de rotación.",
     invariants: [
       "Distancias entre puntos",
       "Ángulos internos",
       "Orientación de la figura (directa)",
-      "El centro C queda fijo: C' = C",
+      "El centro $C$ queda fijo: $C' = C$",
     ],
     formulas: [
       {
         title: "90° Antihorario (Centro en origen)",
         formula: "P(x, y) → P'(-y, x)",
-        note: "Giro de 90° positivo",
+        note: "Giro de $90^\\circ$ positivo",
       },
       {
         title: "180° (Centro en origen)",
@@ -209,33 +209,33 @@ const THEORIES: Theory[] = [
       {
         title: "270° Antihorario / 90° Horario",
         formula: "P(x, y) → P'(y, -x)",
-        note: "Giro de 270° o -90°",
+        note: "Giro de $270^\\circ$ o $-90^\\circ$",
       },
       {
-        title: "Ángulo general α (Centro en origen)",
-        formula: "x' = x·cos(α) - y·sen(α)\ny' = x·sen(α) + y·cos(α)",
+        title: "Ángulo general $\\alpha$ (Centro en origen)",
+        formula: "x' = x \\cdot \\cos(\\alpha) - y \\cdot \\sin(\\alpha)\ny' = x \\cdot \\sin(\\alpha) + y \\cdot \\cos(\\alpha)",
         note: "Fórmulas trigonométricas generales",
       },
     ],
     properties: [
       "Isometría directa: conserva distancias, ángulos y sentido",
-      "El centro C es el único punto invariante (si α ≠ k·360°)",
-      "Rotación de 360° (o 0°) = transformación identidad",
-      "Rotación de 180° = simetría central respecto al centro C",
+      "El centro $C$ es el único punto invariante (si $\\alpha \\neq k \\cdot 360^\\circ$)",
+      "Rotación de $360^\\circ$ (o $0^\\circ$) = transformación identidad",
+      "Rotación de $180^\\circ$ = simetría central respecto al centro $C$",
     ],
     examples: [
       {
-        title: "A(3, 1) rotado 90° antihorario en O(0,0)",
+        title: "$A(3, 1)$ rotado $90^\\circ$ antihorario en $O(0,0)$",
         steps: [
-          "Fórmula 90°: P'( -y, x )",
-          "x = 3, y = 1 → A'(-1, 3)",
-          "Distancia al origen: |OA| = √(9+1) = √10 = |OA'| ✓",
+          "Fórmula $90^\\circ$: $P'(-y, x)$",
+          "$x = 3, y = 1 \\implies A'(-1, 3)$",
+          "Distancia al origen: $|OA| = \\sqrt{9+1} = \\sqrt{10} = |OA'|$ ✓",
         ],
       },
     ],
     commonErrors: [
       "Confundir sentido horario con antihorario (en matemáticas positivo = antihorario)",
-      "Rotar respecto al origen cuando el problema pide otro centro (h, k)",
+      "Rotar respecto al origen cuando el problema pide otro centro $(h, k)$",
     ],
     mnemonic:
       "Girar como las manecillas de un reloj... ¡pero en reversa! (positivo = contra reloj).",
@@ -245,51 +245,51 @@ const THEORIES: Theory[] = [
     label: "Homotecia",
     icon: Maximize2,
     colorAccent: "#9333ea",
-    tagline: "Ampliación o contracción con factor k desde centro C",
+    tagline: "Ampliación o contracción con factor $k$ desde centro $C$",
     definition:
-      "Una homotecia multiplica las distancias desde un punto fijo (centro de homotecia C) por un factor k ≠ 0. Si |k| > 1 es ampliación; si 0 < |k| < 1 es contracción. No es isometría (salvo |k|=1), sino semejanza.",
+      "Una homotecia multiplica las distancias desde un punto fijo (centro de homotecia $C$) por un factor $k \\neq 0$. Si $|k| > 1$ es ampliación; si $0 < |k| < 1$ es contracción. No es isometría (salvo $|k|=1$), sino semejanza.",
     invariants: [
       "Ángulos internos de la figura (se conservan exactamente)",
       "Forma general (figuras semejantes)",
-      "El centro C queda fijo",
+      "El centro $C$ queda fijo",
       "Paralelismo: cada lado es paralelo a su imagen",
     ],
     formulas: [
       {
         title: "Centro en el origen (0,0)",
         formula: "P(x, y) → P'(k·x, k·y)",
-        note: "Se multiplican ambas coordenadas por el factor k",
+        note: "Se multiplican ambas coordenadas por el factor $k$",
       },
       {
-        title: "Centro C(xc, yc) genérico",
-        formula: "x' = xc + k·(x - xc)\ny' = yc + k·(y - yc)",
+        title: "Centro $C(x_c, y_c)$ genérico",
+        formula: "x' = x_c + k \\cdot (x - x_c)\ny' = y_c + k \\cdot (y - y_c)",
         note: "Desplazar al centro, escalar y regresar",
       },
       {
         title: "Razón de Áreas",
-        formula: "Área(F') = k² · Área(F)",
-        note: "El área crece o decrece al cuadrado del factor k",
+        formula: "\\text{Área}(F') = k^2 \\cdot \\text{Área}(F)",
+        note: "El área crece o decrece al cuadrado del factor $k$",
       },
     ],
     properties: [
       "Transformación de semejanza: conserva ángulos y proporciones",
-      "Distancias: d(A', B') = |k| · d(A, B)",
-      "Si k > 0: homotecia directa (al mismo lado del centro)",
-      "Si k < 0: homotecia inversa (al lado opuesto del centro)",
+      "Distancias: $d(A', B') = |k| \\cdot d(A, B)$",
+      "Si $k > 0$: homotecia directa (al mismo lado del centro)",
+      "Si $k < 0$: homotecia inversa (al lado opuesto del centro)",
     ],
     examples: [
       {
-        title: "A(2, 3) con centro O(0,0) y k = 2.5",
+        title: "$A(2, 3)$ con centro $O(0,0)$ y $k = 2.5$",
         steps: [
-          "A'(2.5 · 2, 2.5 · 3)",
-          "A'(5, 7.5)",
-          "El triángulo resultante tiene 2.5× el tamaño y 6.25× el área ✓",
+          "$A'(2.5 \\cdot 2, 2.5 \\cdot 3)$",
+          "$A'(5, 7.5)$",
+          "El triángulo resultante tiene $2.5\\times$ el tamaño y $6.25\\times$ el área ✓",
         ],
       },
     ],
     commonErrors: [
-      "Creer que el área se multiplica por k (se multiplica por k²)",
-      "Olvidar que k negativo invierte la figura al lado opuesto del centro",
+      "Creer que el área se multiplica por $k$ (se multiplica por $k^2$)",
+      "Olvidar que $k$ negativo invierte la figura al lado opuesto del centro",
     ],
     mnemonic:
       "Como un proyector de cine: alejas la pantalla y la imagen se agranda manteniendo sus proporciones.",
@@ -299,14 +299,14 @@ const THEORIES: Theory[] = [
     label: "Simetría Central",
     icon: Target,
     colorAccent: "#0284c7",
-    tagline: "Reflejo respecto a un punto O (giro de 180°)",
+    tagline: "Reflejo respecto a un punto $O$ (giro de $180^\\circ$)",
     definition:
-      "La simetría central respecto a un punto O asigna a cada punto P su imagen P' tal que O es el punto medio del segmento PP'. Es equivalente a una rotación de 180° alrededor de O y a una homotecia con k = -1.",
+      "La simetría central respecto a un punto $O$ asigna a cada punto $P$ su imagen $P'$ tal que $O$ es el punto medio del segmento $PP'$. Es equivalente a una rotación de $180^\\circ$ alrededor de $O$ y a una homotecia con $k = -1$.",
     invariants: [
       "Distancias entre puntos (isometría)",
       "Ángulos internos y áreas",
       "Orientación de la figura (directa en el plano)",
-      "El centro O es el único punto invariante",
+      "El centro $O$ es el único punto invariante",
     ],
     formulas: [
       {
@@ -315,31 +315,31 @@ const THEORIES: Theory[] = [
         note: "Se invierten los signos de ambas coordenadas",
       },
       {
-        title: "Centro C(xc, yc) genérico",
-        formula: "x' = 2·xc - x\ny' = 2·yc - y",
-        note: "O es el punto medio de PP'",
+        title: "Centro $C(x_c, y_c)$ genérico",
+        formula: "x' = 2x_c - x\ny' = 2y_c - y",
+        note: "$O$ es el punto medio de $PP'$",
       },
     ],
     properties: [
       "Isometría directa (conserva distancias, ángulos y orientación)",
-      "El punto O es el único punto doble o invariante",
-      "Las rectas que pasan por O son invariantes globales",
-      "Equivale exactamente a Rotación de 180° con centro O",
+      "El punto $O$ es el único punto doble o invariante",
+      "Las rectas que pasan por $O$ son invariantes globales",
+      "Equivale exactamente a Rotación de $180^\\circ$ con centro $O$",
     ],
     examples: [
       {
-        title: "A(4, -2) con centro en C(1, 1)",
+        title: "$A(4, -2)$ con centro en $C(1, 1)$",
         steps: [
-          "x' = 2(1) - 4 = -2",
-          "y' = 2(1) - (-2) = 4",
-          "A'(-2, 4)",
-          "Verificación: punto medio ((4-2)/2, (-2+4)/2) = (1, 1) ✓",
+          "$x' = 2(1) - 4 = -2$",
+          "$y' = 2(1) - (-2) = 4$",
+          "$A'(-2, 4)$",
+          "Verificación: punto medio $\\left(\\frac{4-2}{2}, \\frac{-2+4}{2}\\right) = (1, 1)$ ✓",
         ],
       },
     ],
     commonErrors: [
       "Confundir simetría central con axial (la central es respecto a un PUNTO)",
-      "Olvidar que equivale a un giro de 180°",
+      "Olvidar que equivale a un giro de $180^\\circ$",
     ],
     mnemonic:
       "Trazar una línea recta desde cada punto que pase por el centro y continuar la misma distancia al otro lado.",

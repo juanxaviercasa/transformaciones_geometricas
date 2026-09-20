@@ -61,16 +61,19 @@ function applyMathRule(
 export function autoFormatMathText(text: string): string {
   if (!text) return '';
 
-  let current = formulaToLatex(text);
+  let current = text;
 
-  // Regla 1: Mapeos completos tipo P(x, y) \to P'(-y, x) o A(3, 2) \to A'(3, -2)
+  // Regla 1: Mapeos con flecha: P(x, y) → P'(x, -y) o A(3, 2) → A'(3, -2)
   current = applyMathRule(
     current,
-    /([A-Za-z0-9'_]+\([^)]+\)\s*\\to\s*[A-Za-z0-9'_]+\([^)]+\))/g,
-    (_, match) => `$${match.trim()}$`
+    /\b([A-Za-z0-9'_]+\([^)]+\)\s*(?:→|\\to)\s*[A-Za-z0-9'_]+\([^)]+\))/g,
+    (match) => {
+      const latex = formulaToLatex(match).replace(/→/g, ' \\to ');
+      return `$${latex.trim()}$`;
+    }
   );
 
-  // Regla 2: Vectores directores: v = (x, y) o (\Delta x, \Delta y)
+  // Regla 2: Vectores directores: v = (x, y)
   current = applyMathRule(
     current,
     /\bv\s*=\s*\(([^)]+)\)/g,
@@ -87,54 +90,48 @@ export function autoFormatMathText(text: string): string {
     () => `$|\\vec{v}|$`
   );
 
-  // Regla 3: Módulos con barras: |OA| = \sqrt{9+1} = \sqrt{10} = |OA'| o |v| = ...
+  // Regla 3: Módulos con barras: |OA| = √(9+1) = √10 = |OA'| o |v| = ...
   current = applyMathRule(
     current,
     /(\|[A-Za-z0-9'_]+\|\s*=\s*[^✓\n;]+)/g,
     (match) => {
       let m = match.trim();
       const unitMatch = m.match(/\s+([a-zA-ZáéíóúÁÉÍÓÚ]+)$/);
+      let unit = '';
       if (unitMatch) {
-        const unit = unitMatch[1];
+        unit = ' ' + unitMatch[1];
         m = m.slice(0, -unitMatch[0].length).trim();
-        return `$${m}$ ${unit}`;
       }
-      return `$${m}$`;
+      return `$${formulaToLatex(m)}$${unit}`;
     }
   );
 
   // Regla 4: Puntos con coordenadas: A(1, 1), A'(3, -2), O(0, 0), C(1, 2), P'(x, y)
   current = applyMathRule(
     current,
-    /\b([A-Z]'?)\s*\(([^)]+)\)/g,
+    /\b([A-Z]'?)\s*\(([-0-9.,\s+\-*/k()a-z]+)\)/g,
     (_, label, coords) => `$${label}(${coords.trim()})$`
   );
 
-  // Regla 5: Ecuaciones de coordenadas o sustituciones aritméticas:
-  // x' = 2(2) - (-1) = 5 o y' = 4 o x' = x \cdot \cos(\alpha) ...
+  // Regla 5: Ecuaciones aritméticas explícitas tipo x' = 2(2) - (-1) = 5 (NO come texto en español)
   current = applyMathRule(
     current,
-    /\b([xy]'?)\s*=\s*([^,;\n]+)/gi,
-    (match) => {
-      if (/[0-9+\-*\\^()]/.test(match)) {
-        return `$${match.trim()}$`;
-      }
-      return match;
-    }
+    /\b([xy]'?)\s*=\s*([-0-9+\-*/()·.\s]+=\s*-?\d+(?:\.\d+)?)/gi,
+    (match) => `$${formulaToLatex(match.trim())}$`
   );
 
-  // Regla 6: Ecuaciones de factor de escala: k = 2.5
+  // Regla 6: Asignaciones de variable aisladas tipo x = 2, k = 2.5 (NO seguidas de texto o dos puntos)
   current = applyMathRule(
     current,
-    /\b([k])\s*=\s*(-?\d+(\.\d+)?)\b/gi,
+    /\b([xyk]'?)\s*=\s*(-?\d+(?:\.\d+)?|[a-z])(?=[\s,;.)✓]|$)/gi,
     (_, varName, val) => `$${varName} = ${val}$`
   );
 
-  // Regla 7: Ecuaciones con Área: \text{Área}(F') = k^2 \cdot \text{Área}(F)
+  // Regla 7: Ecuaciones con Área
   current = applyMathRule(
     current,
-    /(\\text\{Área\}\([^)]+\)\s*=\s*[^✓\n;]+)/g,
-    (match) => `$${match.trim()}$`
+    /(?:Área|Area)\([^)]+\)\s*=\s*[^✓\n;]+/g,
+    (match) => `$${formulaToLatex(match.trim())}$`
   );
 
   // Regla 8: Figuras o puntos primados sueltos: A'B'C', A', B', C', F', P'
@@ -193,7 +190,8 @@ export const MathText: React.FC<MathTextProps> = ({
         const isInline = !isBlock && part.startsWith('$') && part.endsWith('$');
 
         if (isBlock || isInline) {
-          const math = isBlock ? part.slice(2, -2) : part.slice(1, -1);
+          const rawMath = isBlock ? part.slice(2, -2) : part.slice(1, -1);
+          const math = formulaToLatex(rawMath);
           try {
             const html = katex.renderToString(math, {
               displayMode: isBlock,
