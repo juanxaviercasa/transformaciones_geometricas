@@ -29,6 +29,12 @@ import {
   Layers,
   Sparkles
 } from 'lucide-react';
+import { SymmetryExplorer } from './SymmetryExplorer';
+import {
+  ShapeSymmetryResult,
+  WordAutoformaPreset,
+  SymmetryAxis
+} from '../utils/symmetryAnalyzer';
 
 interface AlgebraViewProps {
   vertices: Point[];
@@ -48,6 +54,18 @@ interface AlgebraViewProps {
   onUpdateToggles: React.Dispatch<React.SetStateAction<ClassroomToggles>>;
   showLabels: boolean;
   onToggleLabels: () => void;
+  isDarkMode?: boolean;
+  symmetryResult?: ShapeSymmetryResult;
+  showSymmetryAxes?: boolean;
+  onToggleShowSymmetryAxes?: (val: boolean) => void;
+  selectedSymmetryAxisId?: string | 'all';
+  onSelectSymmetryAxisId?: (id: string | 'all') => void;
+  onLoadAutoforma?: (preset: WordAutoformaPreset) => void;
+  activeAutoformaId?: string | null;
+  onApplyAsReflectionAxis?: (axis: SymmetryAxis) => void;
+  shapeRotationAngle?: number;
+  onRotateFigureInPlace?: (deltaDeg: number) => void;
+  onOrientFigure?: (direction: 'up' | 'down' | 'left' | 'right') => void;
 }
 
 export const AlgebraView: React.FC<AlgebraViewProps> = ({
@@ -67,7 +85,19 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
   toggles,
   onUpdateToggles,
   showLabels,
-  onToggleLabels
+  onToggleLabels,
+  isDarkMode = false,
+  symmetryResult,
+  showSymmetryAxes = false,
+  onToggleShowSymmetryAxes,
+  selectedSymmetryAxisId = 'all',
+  onSelectSymmetryAxisId,
+  onLoadAutoforma,
+  activeAutoformaId,
+  onApplyAsReflectionAxis,
+  shapeRotationAngle = 0,
+  onRotateFigureInPlace,
+  onOrientFigure
 }) => {
   const generalLineAngle = (Math.atan2(config.generalLine.a, -config.generalLine.b) * 180) / Math.PI;
   const normalizedGeneralLineAngle = ((generalLineAngle % 180) + 180) % 180;
@@ -500,6 +530,35 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
 
           <div className="h-px bg-border/60" />
 
+          {/* Toggle Figura Transformada (F') */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
+                {toggles.showTransformedImage !== false ? <Sparkles className="h-3.5 w-3.5 text-purple-500" /> : <EyeOff className="h-3.5 w-3.5 text-ink-soft" />}
+                <span>Figura Transformada (F')</span>
+              </div>
+              <p className="text-[10px] text-ink-soft leading-tight mt-0.5">
+                Muestra la imagen resultante. Desactívalo para ver únicamente la figura original (gráfico único).
+              </p>
+            </div>
+            <button
+              onClick={() => onUpdateToggles((prev) => ({ ...prev, showTransformedImage: prev.showTransformedImage === false }))}
+              className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+                toggles.showTransformedImage !== false ? 'bg-purple-600' : 'bg-border-strong'
+              }`}
+              aria-label="Mostrar u ocultar figura transformada"
+              aria-pressed={toggles.showTransformedImage !== false}
+            >
+              <div
+                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${
+                  toggles.showTransformedImage !== false ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="h-px bg-border/60" />
+
           {/* Toggle Puntos */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex-1">
@@ -581,6 +640,35 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
               <div
                 className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${
                   showLabels ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="h-px bg-border/60" />
+
+          {/* Toggle Ejes Cartesianos */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-ink">
+                {toggles.showAxes !== false ? <Compass className="h-3.5 w-3.5 text-accent" /> : <EyeOff className="h-3.5 w-3.5 text-ink-soft" />}
+                <span>Ejes Cartesianos (X e Y)</span>
+              </div>
+              <p className="text-[10px] text-ink-soft leading-tight mt-0.5">
+                Muestra u oculta los ejes X e Y, marcas numéricas, flechas y origen O.
+              </p>
+            </div>
+            <button
+              onClick={() => onUpdateToggles((prev) => ({ ...prev, showAxes: prev.showAxes === false }))}
+              className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+                toggles.showAxes !== false ? 'bg-accent' : 'bg-border-strong'
+              }`}
+              aria-label="Mostrar u ocultar ejes cartesianos"
+              aria-pressed={toggles.showAxes !== false}
+            >
+              <div
+                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform absolute top-[3px] left-[3px] ${
+                  toggles.showAxes !== false ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
             </button>
@@ -755,9 +843,30 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
         )}
 
         {config.type === 'reflection' && (
-          <div className="p-3 rounded-xl bg-panel border border-border space-y-2 font-sans text-xs">
-            <span className="text-ink-soft block font-medium">
-              Ejes de Reflexión L:
+          <div className="space-y-3 font-sans text-xs">
+            {/* EXPLORADOR DE AUTOFORMAS Y CONTEO DE EJES DE SIMETRÍA */}
+            {symmetryResult && onToggleShowSymmetryAxes && onSelectSymmetryAxisId && onLoadAutoforma && (
+              <SymmetryExplorer
+                symmetryResult={symmetryResult}
+                showSymmetryAxes={showSymmetryAxes}
+                onToggleShowSymmetryAxes={onToggleShowSymmetryAxes}
+                selectedAxisId={selectedSymmetryAxisId}
+                onSelectAxisId={onSelectSymmetryAxisId}
+                onLoadAutoforma={onLoadAutoforma}
+                activeAutoformaId={activeAutoformaId}
+                onApplyAsReflectionAxis={onApplyAsReflectionAxis}
+                showTransformedImage={toggles.showTransformedImage !== false}
+                onToggleShowTransformedImage={(val) => onUpdateToggles((prev) => ({ ...prev, showTransformedImage: val }))}
+                isDarkMode={isDarkMode}
+                shapeRotationAngle={shapeRotationAngle}
+                onRotateFigureInPlace={onRotateFigureInPlace}
+                onOrientFigure={onOrientFigure}
+              />
+            )}
+
+            <div className="p-3 rounded-xl bg-panel border border-border space-y-2">
+              <span className="text-ink-soft block font-medium">
+                Ejes de Reflexión L (Manual):
               {activeReflectionAxes.length > 1 && (
                 <span className="ml-1 text-rose-600 font-bold">({activeReflectionAxes.length} activos)</span>
               )}
@@ -881,136 +990,304 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
               </div>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-        {config.type === 'rotation' && (
-          <div className="p-3 rounded-xl bg-panel border border-border space-y-3 font-mono text-xs">
-            <div className="flex justify-between items-center font-semibold text-amber-600">
-              <span className="flex items-center gap-1.5 font-sans font-bold text-ink">
-                <RotateCw className="h-3.5 w-3.5 text-amber-600" /> <MathText text="Ángulo de Giro ($\alpha$):" />
-              </span>
-              <span className="text-sm font-bold bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-300 text-amber-900 shadow-sm">
-                {config.angleDeg}°
-              </span>
-            </div>
+        {config.type === 'rotation' && (() => {
+          const rotationSteps = config.rotationSteps && config.rotationSteps.length > 0
+            ? config.rotationSteps
+            : [{ angleDeg: config.angleDeg, direction: config.direction, center: config.center }];
 
-            {/* Selector de Sentido de Giro */}
-            <div className="grid grid-cols-2 gap-1.5 font-sans">
-              <button
-                onClick={() => onUpdateConfig((prev) => ({ ...prev, direction: 'anticlockwise' }))}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold border transition ${
-                  config.direction === 'anticlockwise'
-                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-                    : 'bg-surface text-ink border-border hover:bg-black/5'
-                }`}
-              >
-                <span>↺</span> Antihorario (+)
-              </button>
-              <button
-                onClick={() => onUpdateConfig((prev) => ({ ...prev, direction: 'clockwise' }))}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold border transition ${
-                  config.direction === 'clockwise'
-                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-                    : 'bg-surface text-ink border-border hover:bg-black/5'
-                }`}
-              >
-                <span>↻</span> Horario (-)
-              </button>
-            </div>
+          const baseVertexName = vertices[0]?.label || 'A';
 
-            {/* Botones de ángulos escolares directos */}
-            <div className="space-y-1 font-sans">
-              <span className="text-[10px] text-ink-soft">Ángulos frecuentes:</span>
-              <div className="grid grid-cols-5 gap-1">
-                {[90, 180, 270, 45, 60].map((deg) => (
+          const handleAddStep = () => {
+            if (rotationSteps.length >= 6) return;
+            onUpdateConfig((prev) => {
+              const current = prev.rotationSteps && prev.rotationSteps.length > 0
+                ? prev.rotationSteps
+                : [{ angleDeg: prev.angleDeg, direction: prev.direction, center: prev.center }];
+              const next = [...current, { angleDeg: 90, direction: 'anticlockwise' as const, center: prev.center }];
+              return {
+                ...prev,
+                rotationSteps: next,
+                angleDeg: next[0].angleDeg,
+                direction: next[0].direction
+              };
+            });
+          };
+
+          const handleRemoveStep = (idxToRemove: number) => {
+            onUpdateConfig((prev) => {
+              const current = prev.rotationSteps && prev.rotationSteps.length > 0
+                ? prev.rotationSteps
+                : [{ angleDeg: prev.angleDeg, direction: prev.direction, center: prev.center }];
+              const next = current.filter((_, idx) => idx !== idxToRemove);
+              return {
+                ...prev,
+                rotationSteps: next,
+                angleDeg: next[0]?.angleDeg ?? prev.angleDeg,
+                direction: next[0]?.direction ?? prev.direction
+              };
+            });
+          };
+
+          const handleUpdateStep = (stepIdx: number, updates: Partial<{ angleDeg: number; direction: 'anticlockwise' | 'clockwise'; center?: Point }>) => {
+            onUpdateConfig((prev) => {
+              const current = prev.rotationSteps && prev.rotationSteps.length > 0
+                ? [...prev.rotationSteps]
+                : [{ angleDeg: prev.angleDeg, direction: prev.direction, center: prev.center }];
+              current[stepIdx] = { ...current[stepIdx], ...updates };
+              return {
+                ...prev,
+                rotationSteps: current,
+                ...(stepIdx === 0 ? {
+                  angleDeg: current[0].angleDeg,
+                  direction: current[0].direction,
+                  ...(current[0].center ? { center: current[0].center } : {})
+                } : {})
+              };
+            });
+          };
+
+          return (
+            <div className="p-3 rounded-xl bg-panel border border-border space-y-3 font-mono text-xs">
+              {/* Encabezado con badge de cadena */}
+              <div className="flex justify-between items-center font-semibold text-amber-600">
+                <span className="flex items-center gap-1.5 font-sans font-bold text-ink">
+                  <RotateCw className="h-3.5 w-3.5 text-amber-600" />
+                  <span>{rotationSteps.length === 1 ? 'Rotación' : 'Rotaciones Sucesivas'}</span>
+                </span>
+                <span className="text-xs font-bold bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 shadow-sm font-sans">
+                  {rotationSteps.length === 1 ? '1 Giro' : `${rotationSteps.length} Giros (Cadena)`}
+                </span>
+              </div>
+
+              <p className="font-sans text-[10px] leading-tight text-ink-soft">
+                {rotationSteps.length === 1
+                  ? 'Aplica un giro al objeto con centro C y ángulo α. Puedes añadir más giros encadenados.'
+                  : `Secuencia encadenada: cada etapa rota a partir de la imagen previa (${baseVertexName} ➔ ${baseVertexName}' ➔ ${baseVertexName}'' ...).`}
+              </p>
+
+              {/* Centro de rotación general C */}
+              <div className="p-2.5 rounded-lg border border-border/80 bg-surface/80 space-y-2 font-sans">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-1.5">
+                    <Target className="h-3.5 w-3.5 text-amber-600" />
+                    <span className="text-ink font-semibold text-xs">Centro de Giro C:</span>
+                  </div>
                   <button
-                    key={deg}
-                    onClick={() => onUpdateConfig((prev) => ({ ...prev, angleDeg: deg }))}
-                    className={`py-1 rounded text-[11px] font-bold border transition ${
-                      config.angleDeg === deg
-                        ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-                        : 'bg-surface text-ink-soft hover:text-ink border-border'
-                    }`}
+                    type="button"
+                    onClick={() => onSetTool('pivot')}
+                    title="Hacer clic en la pizarra para fijar un nuevo centro de giro"
+                    className="px-2 py-0.5 text-[11px] rounded-lg bg-surface border border-border hover:border-amber-500 hover:text-amber-700 font-semibold transition"
                   >
-                    {deg}°
+                    Fijar en Pizarra
                   </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Slider de ángulo */}
-            <div className="space-y-1">
-              <input
-                type="range"
-                min="0"
-                max="360"
-                step="5"
-                value={config.angleDeg}
-                onChange={(e) =>
-                  onUpdateConfig((prev) => ({ ...prev, angleDeg: parseInt(e.target.value) }))
-                }
-                className="w-full accent-amber-500 cursor-pointer"
-              />
-              <div className="flex justify-between text-[9px] text-ink-faint font-sans px-0.5">
-                <span>0°</span>
-                <span>90°</span>
-                <span>180°</span>
-                <span>270°</span>
-                <span>360°</span>
-              </div>
-            </div>
-
-            {/* Centro de rotación C */}
-            <div className="pt-2 border-t border-border/80 space-y-2 font-sans">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-1.5">
-                  <Target className="h-3.5 w-3.5 text-amber-600" />
-                  <span className="text-ink-soft text-xs">Centro C:</span>
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1 text-[10px] text-ink-soft">
+                    <span>X</span>
+                    <input
+                      type="number"
+                      value={config.center.x}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        if (!Number.isNaN(value)) {
+                          onUpdateConfig((prev) => {
+                            const newCenter = { ...prev.center, x: value };
+                            const steps = prev.rotationSteps?.map((s) => ({ ...s, center: s.center ? { ...s.center, x: value } : newCenter }));
+                            return { ...prev, center: newCenter, rotationSteps: steps };
+                          });
+                        }
+                      }}
+                      className="w-full rounded-lg border border-border bg-panel px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </label>
+                  <label className="space-y-1 text-[10px] text-ink-soft">
+                    <span>Y</span>
+                    <input
+                      type="number"
+                      value={config.center.y}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        if (!Number.isNaN(value)) {
+                          onUpdateConfig((prev) => {
+                            const newCenter = { ...prev.center, y: value };
+                            const steps = prev.rotationSteps?.map((s) => ({ ...s, center: s.center ? { ...s.center, y: value } : newCenter }));
+                            return { ...prev, center: newCenter, rotationSteps: steps };
+                          });
+                        }
+                      }}
+                      className="w-full rounded-lg border border-border bg-panel px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Lista de giros encadenados */}
+              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-0.5">
+                {rotationSteps.map((step, idx) => {
+                  const sourcePrime = idx === 0 ? '' : "'".repeat(idx);
+                  const targetPrime = "'".repeat(idx + 1);
+                  const stepLabel = `Giro ${idx + 1}: ${baseVertexName}${sourcePrime} ➔ ${baseVertexName}${targetPrime}`;
+
+                  const stepThemes = [
+                    {
+                      border: 'border-amber-400/80 dark:border-amber-700/80',
+                      bg: 'bg-amber-500/5',
+                      numBg: 'bg-amber-500/20 text-amber-800 dark:text-amber-300',
+                      badge: 'bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-800',
+                      btnActive: 'bg-amber-600 text-white border-amber-600 shadow-xs',
+                      accent: 'accent-amber-500'
+                    },
+                    {
+                      border: 'border-sky-400/80 dark:border-sky-700/80',
+                      bg: 'bg-sky-500/5',
+                      numBg: 'bg-sky-500/20 text-sky-800 dark:text-sky-300',
+                      badge: 'bg-sky-100 dark:bg-sky-950 text-sky-900 dark:text-sky-200 border-sky-300 dark:border-sky-800',
+                      btnActive: 'bg-sky-600 text-white border-sky-600 shadow-xs',
+                      accent: 'accent-sky-500'
+                    },
+                    {
+                      border: 'border-purple-400/80 dark:border-purple-700/80',
+                      bg: 'bg-purple-500/5',
+                      numBg: 'bg-purple-500/20 text-purple-800 dark:text-purple-300',
+                      badge: 'bg-purple-100 dark:bg-purple-950 text-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-800',
+                      btnActive: 'bg-purple-600 text-white border-purple-600 shadow-xs',
+                      accent: 'accent-purple-500'
+                    },
+                    {
+                      border: 'border-emerald-400/80 dark:border-emerald-700/80',
+                      bg: 'bg-emerald-500/5',
+                      numBg: 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-300',
+                      badge: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-800',
+                      btnActive: 'bg-emerald-600 text-white border-emerald-600 shadow-xs',
+                      accent: 'accent-emerald-500'
+                    },
+                    {
+                      border: 'border-pink-400/80 dark:border-pink-700/80',
+                      bg: 'bg-pink-500/5',
+                      numBg: 'bg-pink-500/20 text-pink-800 dark:text-pink-300',
+                      badge: 'bg-pink-100 dark:bg-pink-950 text-pink-900 dark:text-pink-200 border-pink-300 dark:border-pink-800',
+                      btnActive: 'bg-pink-600 text-white border-pink-600 shadow-xs',
+                      accent: 'accent-pink-500'
+                    }
+                  ];
+                  const theme = stepThemes[idx % stepThemes.length];
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-2.5 rounded-xl border ${theme.border} ${theme.bg} space-y-2 font-sans transition-all`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-5 h-5 rounded-md ${theme.numBg} flex items-center justify-center font-bold text-[10px]`}>
+                            {idx + 1}
+                          </span>
+                          <span className="font-bold text-[11px] text-ink">{stepLabel}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded border ${theme.badge}`}>
+                            {step.direction === 'clockwise' ? '-' : '+'}{step.angleDeg}°
+                          </span>
+                          {rotationSteps.length > 1 && (
+                            <button
+                              type="button"
+                              title="Quitar este giro de la cadena"
+                              onClick={() => handleRemoveStep(idx)}
+                              className="px-1.5 py-0.5 text-[10px] font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition"
+                            >
+                              Quitar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Selector de Sentido de Giro */}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateStep(idx, { direction: 'anticlockwise' })}
+                          className={`flex items-center justify-center gap-1 py-1 px-1.5 rounded-lg text-[11px] font-semibold border transition ${
+                            step.direction === 'anticlockwise'
+                              ? theme.btnActive
+                              : 'bg-panel text-ink border-border hover:bg-black/5'
+                          }`}
+                        >
+                          <span>↺</span> Antihorario (+)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateStep(idx, { direction: 'clockwise' })}
+                          className={`flex items-center justify-center gap-1 py-1 px-1.5 rounded-lg text-[11px] font-semibold border transition ${
+                            step.direction === 'clockwise'
+                              ? theme.btnActive
+                              : 'bg-panel text-ink border-border hover:bg-black/5'
+                          }`}
+                        >
+                          <span>↻</span> Horario (-)
+                        </button>
+                      </div>
+
+                      {/* Botones de ángulos frecuentes */}
+                      <div className="space-y-1">
+                        <div className="grid grid-cols-5 gap-1">
+                          {[90, 180, 270, 45, 60].map((deg) => (
+                            <button
+                              type="button"
+                              key={deg}
+                              onClick={() => handleUpdateStep(idx, { angleDeg: deg })}
+                              className={`py-0.5 rounded text-[10px] font-bold border transition ${
+                                step.angleDeg === deg
+                                  ? theme.btnActive
+                                  : 'bg-panel text-ink-soft hover:text-ink border-border'
+                              }`}
+                            >
+                              {deg}°
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Slider de ángulo */}
+                      <div className="space-y-0.5">
+                        <input
+                          type="range"
+                          min="0"
+                          max="360"
+                          step="5"
+                          value={step.angleDeg}
+                          onChange={(e) => handleUpdateStep(idx, { angleDeg: parseInt(e.target.value) || 0 })}
+                          className={`w-full ${theme.accent} cursor-pointer h-1.5`}
+                        />
+                        <div className="flex justify-between text-[9px] text-ink-faint px-0.5">
+                          <span>0°</span>
+                          <span>90°</span>
+                          <span>180°</span>
+                          <span>270°</span>
+                          <span>360°</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Botón para añadir nueva rotación sucesiva */}
+              {rotationSteps.length < 6 && (
                 <button
-                  onClick={() => onSetTool('pivot')}
-                  title="Hacer clic en la pizarra para fijar un nuevo centro de giro"
-                  className="px-2.5 py-1 text-xs rounded-lg bg-surface border border-border hover:border-amber-500 hover:text-amber-700 font-semibold transition"
+                  type="button"
+                  onClick={handleAddStep}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-2 font-sans text-xs font-bold text-amber-700 dark:text-amber-300 transition hover:bg-amber-500/20 active:scale-[0.98]"
                 >
-                  Fijar en Pizarra
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Añadir Rotación Sucesiva (Giro {rotationSteps.length + 1})</span>
                 </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="space-y-1 text-[10px] text-ink-soft">
-                  <span>X</span>
-                  <input
-                    type="number"
-                    value={config.center.x}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      if (!Number.isNaN(value)) {
-                        onUpdateConfig((prev) => ({ ...prev, center: { ...prev.center, x: value } }));
-                      }
-                    }}
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </label>
-                <label className="space-y-1 text-[10px] text-ink-soft">
-                  <span>Y</span>
-                  <input
-                    type="number"
-                    value={config.center.y}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      if (!Number.isNaN(value)) {
-                        onUpdateConfig((prev) => ({ ...prev, center: { ...prev.center, y: value } }));
-                      }
-                    }}
-                    className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs font-mono text-ink outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </label>
-              </div>
-              <div className="font-mono text-amber-700 font-bold text-xs text-right">
-                ({config.center.x}, {config.center.y})
-              </div>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {config.type === 'homothety' && (() => {
           const applyScale = (nextValue: number) => {
@@ -1236,7 +1513,9 @@ export const AlgebraView: React.FC<AlgebraViewProps> = ({
             </span>
           </div>
           <div className="mt-1 text-xs font-semibold text-ink">
-            F' ({transformedVertices.length} vértices)
+            {config.type === 'rotation' && (config.rotationSteps?.length ?? 1) > 1
+              ? `Imagen final F${"'".repeat(config.rotationSteps?.length ?? 1)} (${transformedVertices.length} vértices)`
+              : `F' (${transformedVertices.length} vértices)`}
           </div>
         </div>
 

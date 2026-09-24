@@ -73,6 +73,13 @@ import { InteractiveGuideModal } from './InteractiveGuideModal';
 import { PolygonPreview } from './PolygonPreview';
 import { SHAPE_PRESETS } from '../utils/transformations';
 import { embedProjectInPNG, extractProjectFromPNG } from '../utils/pngMetadata';
+import {
+  analyzeSymmetry,
+  ShapeSymmetryResult,
+  WordAutoformaPreset,
+  SymmetryAxis,
+  WORD_AUTOFORMAS
+} from '../utils/symmetryAnalyzer';
 
 import jsPDF from 'jspdf';
 
@@ -329,6 +336,8 @@ export function Workspace({
     showConstructionGuides: true,
     showReflectionDistances: true,
     showPoints: true,
+    showAxes: true,
+    showTransformedImage: true,
     showAlgebraicNotebook: true,
     cleanBoardMode: false
   });
@@ -362,6 +371,16 @@ export function Workspace({
   const isDraggingReflectionLineRef = useRef(false);
   const [isHoveringReflectionLine, setIsHoveringReflectionLine] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
+
+  // 9.b ESTADO DE EJES DE SIMETRÍA Y AUTOFORMAS (WORD)
+  const [showSymmetryAxes, setShowSymmetryAxes] = useState<boolean>(false);
+  const [selectedSymmetryAxisId, setSelectedSymmetryAxisId] = useState<string | 'all'>('all');
+  const [activeAutoformaId, setActiveAutoformaId] = useState<string | null>(null);
+  const [shapeRotationAngle, setShapeRotationAngle] = useState<number>(0);
+
+  const symmetryResult = useMemo(() => {
+    return analyzeSymmetry(vertices, activeAutoformaId || undefined, shapeRotationAngle);
+  }, [vertices, activeAutoformaId, shapeRotationAngle]);
 
   const toggleCanvasFullscreen = useCallback(async () => {
     try {
@@ -478,6 +497,7 @@ export function Workspace({
   const transformedVertices = engineResult.transformedVertices;
   const secondaryTransformedVertices = engineResult.secondaryTransformedVertices || [];
   const translationStages = engineResult.translationStages || [];
+  const rotationStages = engineResult.rotationStages || [];
 
   const notebookContext = useMemo(() => {
     switch (config.type) {
@@ -517,18 +537,30 @@ export function Workspace({
             'Se conservan ángulos, longitudes y área.'
           ]
         };
-      case 'rotation':
+      case 'rotation': {
+        const steps = config.rotationSteps?.length ? config.rotationSteps : [{ angleDeg: config.angleDeg, direction: config.direction, center: config.center }];
+        const isMulti = steps.length > 1;
         return {
-          typeLabel: 'Rotación',
-          summary: `La figura gira ${Math.abs(config.angleDeg)}° alrededor del centro C(${formatNum(config.center.x)}, ${formatNum(config.center.y)}) en sentido ${config.direction === 'clockwise' ? 'horario' : 'antihorario'}.`,
-          formula: `P' = C + R_α(P - C), con α = ${config.direction === 'clockwise' ? '-' : '+'}${Math.abs(config.angleDeg)}°`,
-          studentExplanation: 'Cada punto describe un arco alrededor del centro. La distancia a ese centro se conserva, pero la posición angular cambia; por eso la figura gira sin deformarse.',
-          parameters: [
-            `Centro: C(${formatNum(config.center.x)}, ${formatNum(config.center.y)})`,
-            `Ángulo: ${Math.abs(config.angleDeg)}°`,
-            `Sentido: ${config.direction === 'clockwise' ? 'horario' : 'antihorario'}`
-          ]
+          typeLabel: isMulti ? `Rotaciones Sucesivas (${steps.length} Giros)` : 'Rotación',
+          summary: isMulti
+            ? `Secuencia de ${steps.length} rotaciones encadenadas a partir de la figura original: ` +
+              steps.map((s, idx) => `Giro ${idx + 1} (${"'".repeat(idx + 1)}): ${s.direction === 'clockwise' ? '-' : '+'}${Math.abs(s.angleDeg)}°`).join(' ➔ ')
+            : `La figura gira ${Math.abs(config.angleDeg)}° alrededor del centro C(${formatNum(config.center.x)}, ${formatNum(config.center.y)}) en sentido ${config.direction === 'clockwise' ? 'horario' : 'antihorario'}.`,
+          formula: isMulti
+            ? `F₀ → F₁ → F₂ → ... (cada etapa rota la imagen previa)`
+            : `P' = C + R_α(P - C), con α = ${config.direction === 'clockwise' ? '-' : '+'}${Math.abs(config.angleDeg)}°`,
+          studentExplanation: isMulti
+            ? 'Cada punto rota primero a su primera posición (A\'); desde esa nueva posición se vuelve a aplicar el siguiente giro (A\'\'), continuando así de forma sucesiva sin perder congruencia ni deformarse.'
+            : 'Cada punto describe un arco alrededor del centro. La distancia a ese centro se conserva, pero la posición angular cambia; por eso la figura gira sin deformarse.',
+          parameters: isMulti
+            ? steps.map((s, idx) => `Giro ${idx + 1} (${"'".repeat(idx + 1)}): ${Math.abs(s.angleDeg)}° ${s.direction === 'clockwise' ? 'horario (-)' : 'antihorario (+)'} con centro C(${formatNum((s.center || config.center).x)}, ${formatNum((s.center || config.center).y)})`)
+            : [
+                `Centro: C(${formatNum(config.center.x)}, ${formatNum(config.center.y)})`,
+                `Ángulo: ${Math.abs(config.angleDeg)}°`,
+                `Sentido: ${config.direction === 'clockwise' ? 'horario' : 'antihorario'}`
+              ]
         };
+      }
       case 'central_reflection':
         return {
           typeLabel: 'Simetría central',
@@ -664,6 +696,7 @@ export function Workspace({
 
   // Cargar figura prediseñada
   const handleLoadPreset = (preset: (typeof SHAPE_PRESETS)[0]) => {
+    commitAction();
     setVertices(preset.vertices);
     setConfig((prev) => ({ ...prev, translationTarget: undefined, translationTargets: [], translationReady: true }));
     setIsPolygon(true);
@@ -675,6 +708,30 @@ export function Workspace({
     setSegmentStartVertex(null);
     setIsPresetsOpen(false);
     setTool('select');
+    if (preset.category === 'Autoformas (Simetría)' || (preset as any).symmetryCount !== undefined) {
+      setActiveAutoformaId(preset.id);
+      setShowSymmetryAxes(true);
+      setSelectedSymmetryAxisId('all');
+      setToggles((prev) => ({ ...prev, showTransformedImage: false }));
+      setConfig((prev) => ({
+        ...prev,
+        type: 'reflection',
+        reflectionAxis: 'y',
+        customAxisValue: 0,
+        reflectionAxes: ['y'],
+        translationTarget: undefined,
+        translationTargets: [],
+        translationReady: true
+      }));
+      setTimeout(() => {
+        handleAutoFitView();
+      }, 50);
+      showToast(`Autoforma "${preset.name}" cargada: figura única con ${(preset as any).isInfinite ? 'infinitos' : (preset as any).symmetryCount} ejes de simetría máximos.`, 'info');
+    } else {
+      setActiveAutoformaId(null);
+      setShowSymmetryAxes(false);
+      setToggles((prev) => ({ ...prev, showTransformedImage: true }));
+    }
   };
 
   // Cargar triángulo escolar rápido
@@ -824,25 +881,33 @@ export function Workspace({
     }
   };
 
-  // RENDERIZADO DEL PLANO AL ESTILO GEOGEBRA
-  useEffect(() => {
-    if (!isActive) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+  // RENDERIZADO DEL PLANO AL ESTILO GEOGEBRA (FUNCIÓN UNIFICADA PARA LIENZO Y EXPORTACIÓN)
+  const drawGeometryPlane = useCallback((
+    targetCanvas: HTMLCanvasElement,
+    width: number,
+    height: number,
+    activeScale: number,
+    activePan: { x: number; y: number },
+    dpr: number = 1,
+    options: {
+      isExport?: boolean;
+      headerInfo?: {
+        title?: string;
+        type: string;
+        variant: 'student' | 'teacher';
+      };
+    } = {}
+  ) => {
+    const ctx = targetCanvas.getContext('2d');
     if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    const width = canvasDimensions.width || rect.width;
-    const height = canvasDimensions.height || rect.height;
-
     if (width <= 0 || height <= 0) return;
 
+    const isExport = !!options.isExport;
+    const headerHeight = (isExport && options.headerInfo) ? 56 : 0;
+
     // Configuración física interna en píxeles del dispositivo (Retina/High-DPI)
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
+    targetCanvas.width = Math.round(width * dpr);
+    targetCanvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Ajustes por defecto
@@ -853,8 +918,16 @@ export function Workspace({
     ctx.fillStyle = isDarkMode ? '#0b0f19' : '#ffffff';
     ctx.fillRect(0, 0, width, height);
 
-    const originX = width / 2 + pan.x;
-    const originY = height / 2 + pan.y;
+    const planeCenterY = isExport ? headerHeight + (height - headerHeight) / 2 : height / 2;
+    const originX = width / 2 + activePan.x;
+    const originY = planeCenterY + activePan.y;
+    const scale = activeScale;
+    const pan = activePan;
+
+    const toScreen = (pt: { x: number; y: number }, _w?: number, _h?: number) => ({
+      x: originX + pt.x * scale,
+      y: originY - pt.y * scale
+    });
 
     const minUnitX = Math.floor(-originX / scale) - 2;
     const maxUnitX = Math.ceil((width - originX) / scale) + 2;
@@ -912,151 +985,111 @@ export function Workspace({
     }
 
     // 2. EJES COORDENADOS (X e Y) CON FLECHAS
-    const axisLineColor = isDarkMode ? '#475569' : '#334155';
-    const axisLabelColor = isDarkMode ? '#94a3b8' : '#64748b';
-    ctx.lineWidth = baseLW - 0.2;
-    ctx.strokeStyle = axisLineColor;
-    ctx.fillStyle = axisLabelColor;
-    ctx.font = '13px "Inter", -apple-system, sans-serif';
+    const showAxes = toggles.showAxes !== false;
+    if (showAxes) {
+      const axisLineColor = isDarkMode ? '#475569' : '#334155';
+      const axisLabelColor = isDarkMode ? '#94a3b8' : '#64748b';
+      ctx.lineWidth = baseLW - 0.2;
+      ctx.strokeStyle = axisLineColor;
+      ctx.fillStyle = axisLabelColor;
+      ctx.font = '13px "Inter", -apple-system, sans-serif';
 
-    // Eje X
-    ctx.beginPath();
-    ctx.moveTo(0, originY);
-    ctx.lineTo(width, originY);
-    ctx.stroke();
-
-    // Flecha Eje X (+X)
-    ctx.fillStyle = axisLineColor;
-    ctx.beginPath();
-    ctx.moveTo(width - 2, originY);
-    ctx.lineTo(width - 10, originY - 4);
-    ctx.lineTo(width - 10, originY + 4);
-    ctx.closePath();
-    ctx.fill();
-
-    // Eje Y
-    ctx.beginPath();
-    ctx.moveTo(originX, height);
-    ctx.lineTo(originX, 0);
-    ctx.stroke();
-
-    // Flecha Eje Y (+Y)
-    ctx.beginPath();
-    ctx.moveTo(originX, 2);
-    ctx.lineTo(originX - 4, 10);
-    ctx.lineTo(originX + 4, 10);
-    ctx.closePath();
-    ctx.fill();
-
-    // Números en Eje X
-    const step = scale < 22 ? 5 : scale < 35 ? 2 : 1;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = axisLabelColor;
-    for (let u = minUnitX; u <= maxUnitX; u++) {
-      if (u === 0 || u % step !== 0) continue;
-      const sx = originX + u * scale;
+      // Eje X
       ctx.beginPath();
-      ctx.moveTo(sx, originY - 3);
-      ctx.lineTo(sx, originY + 3);
-      ctx.strokeStyle = axisLabelColor;
+      ctx.moveTo(0, originY);
+      ctx.lineTo(width, originY);
       ctx.stroke();
-      ctx.fillText(u.toString(), sx, originY + 5);
-    }
 
-    // Números en Eje Y
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    for (let u = minUnitY; u <= maxUnitY; u++) {
-      if (u === 0 || u % step !== 0) continue;
-      const sy = originY - u * scale;
+      // Flecha Eje X (+X)
+      ctx.fillStyle = axisLineColor;
       ctx.beginPath();
-      ctx.moveTo(originX - 3, sy);
-      ctx.lineTo(originX + 3, sy);
-      ctx.strokeStyle = axisLabelColor;
-      ctx.stroke();
-      ctx.fillText(u.toString(), originX - 6, sy);
-    }
+      ctx.moveTo(width - 2, originY);
+      ctx.lineTo(width - 10, originY - 4);
+      ctx.lineTo(width - 10, originY + 4);
+      ctx.closePath();
+      ctx.fill();
 
-    // Origen O(0,0)
-    ctx.fillStyle = isDarkMode ? '#94a3b8' : '#475569';
-    ctx.font = 'italic bold 13px serif';
-    ctx.fillText('O', originX - 7, originY + 7);
+      // Eje Y
+      ctx.beginPath();
+      ctx.moveTo(originX, height);
+      ctx.lineTo(originX, 0);
+      ctx.stroke();
+
+      // Flecha Eje Y (+Y)
+      ctx.beginPath();
+      ctx.moveTo(originX, 2);
+      ctx.lineTo(originX - 4, 10);
+      ctx.lineTo(originX + 4, 10);
+      ctx.closePath();
+      ctx.fill();
+
+      // Números en Eje X
+      const step = scale < 22 ? 5 : scale < 35 ? 2 : 1;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = axisLabelColor;
+      for (let u = minUnitX; u <= maxUnitX; u++) {
+        if (u === 0 || u % step !== 0) continue;
+        const sx = originX + u * scale;
+        ctx.beginPath();
+        ctx.moveTo(sx, originY - 3);
+        ctx.lineTo(sx, originY + 3);
+        ctx.strokeStyle = axisLabelColor;
+        ctx.stroke();
+        ctx.fillText(u.toString(), sx, originY + 5);
+      }
+
+      // Números en Eje Y
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let u = minUnitY; u <= maxUnitY; u++) {
+        if (u === 0 || u % step !== 0) continue;
+        const sy = originY - u * scale;
+        ctx.beginPath();
+        ctx.moveTo(originX - 3, sy);
+        ctx.lineTo(originX + 3, sy);
+        ctx.strokeStyle = axisLabelColor;
+        ctx.stroke();
+        ctx.fillText(u.toString(), originX - 6, sy);
+      }
+
+      // Origen O(0,0)
+      ctx.fillStyle = isDarkMode ? '#94a3b8' : '#475569';
+      ctx.font = 'italic bold 13px serif';
+      ctx.fillText('O', originX - 7, originY + 7);
+    }
 
     // 3. ELEMENTOS DE TRANSFORMACIÓN (EJE, CENTRO, VECTORES)
-    if (config.type === 'reflection') {
-      ctx.save();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#dc2626';
-      ctx.setLineDash([7, 5]);
-      ctx.beginPath();
-
-      if (config.reflectionAxis === 'x') {
-        ctx.moveTo(0, originY);
-        ctx.lineTo(width, originY);
-      } else if (config.reflectionAxis === 'y') {
-        ctx.moveTo(originX, 0);
-        ctx.lineTo(originX, height);
-      } else if (config.reflectionAxis === 'y=x') {
-        ctx.moveTo(originX - 3000, originY + 3000);
-        ctx.lineTo(originX + 3000, originY - 3000);
-      } else if (config.reflectionAxis === 'y=-x') {
-        ctx.moveTo(originX - 3000, originY - 3000);
-        ctx.lineTo(originX + 3000, originY + 3000);
-      } else if (config.reflectionAxis === 'custom_x') {
-        const sx = originX + config.customAxisValue * scale;
-        ctx.moveTo(sx, 0);
-        ctx.lineTo(sx, height);
-      } else if (config.reflectionAxis === 'custom_y') {
-        const sy = originY - config.customAxisValue * scale;
-        ctx.moveTo(0, sy);
-        ctx.lineTo(width, sy);
-      } else if (config.reflectionAxis === 'general') {
-        const { a, b, c } = config.generalLine;
-        if (b !== 0) {
-          const y1 = (-a * minUnitX - c) / b;
-          const y2 = (-a * maxUnitX - c) / b;
-          const p1 = toScreen({ x: minUnitX, y: y1 }, width, height);
-          const p2 = toScreen({ x: maxUnitX, y: y2 }, width, height);
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-        } else if (a !== 0) {
-          const sx = originX + (-c / a) * scale;
-          ctx.moveTo(sx, 0);
-          ctx.lineTo(sx, height);
-        }
-      }
-      ctx.stroke();
-
-      // Dibujar los ejes adicionales seleccionados con colores distinguibles.
-      const additionalAxisColors = ['#db2777', '#ea580c', '#0891b2', '#65a30d', '#be123c', '#0f766e'];
-      activeReflectionAxes.slice(1).forEach((axis, axisIndex) => {
+    const showTransformed = toggles.showTransformedImage !== false;
+    if (showTransformed) {
+      if (config.type === 'reflection') {
         ctx.save();
-        ctx.strokeStyle = additionalAxisColors[axisIndex % additionalAxisColors.length];
         ctx.lineWidth = 2;
+        ctx.strokeStyle = '#dc2626';
         ctx.setLineDash([7, 5]);
         ctx.beginPath();
-        if (axis === 'x') {
+
+        if (config.reflectionAxis === 'x') {
           ctx.moveTo(0, originY);
           ctx.lineTo(width, originY);
-        } else if (axis === 'y') {
+        } else if (config.reflectionAxis === 'y') {
           ctx.moveTo(originX, 0);
           ctx.lineTo(originX, height);
-        } else if (axis === 'y=x') {
+        } else if (config.reflectionAxis === 'y=x') {
           ctx.moveTo(originX - 3000, originY + 3000);
           ctx.lineTo(originX + 3000, originY - 3000);
-        } else if (axis === 'y=-x') {
+        } else if (config.reflectionAxis === 'y=-x') {
           ctx.moveTo(originX - 3000, originY - 3000);
           ctx.lineTo(originX + 3000, originY + 3000);
-        } else if (axis === 'custom_x') {
+        } else if (config.reflectionAxis === 'custom_x') {
           const sx = originX + config.customAxisValue * scale;
           ctx.moveTo(sx, 0);
           ctx.lineTo(sx, height);
-        } else if (axis === 'custom_y') {
+        } else if (config.reflectionAxis === 'custom_y') {
           const sy = originY - config.customAxisValue * scale;
           ctx.moveTo(0, sy);
           ctx.lineTo(width, sy);
-        } else if (axis === 'general') {
+        } else if (config.reflectionAxis === 'general') {
           const { a, b, c } = config.generalLine;
           if (b !== 0) {
             const y1 = (-a * minUnitX - c) / b;
@@ -1072,64 +1105,110 @@ export function Workspace({
           }
         }
         ctx.stroke();
+
+        // Dibujar los ejes adicionales seleccionados con colores distinguibles.
+        const additionalAxisColors = ['#db2777', '#ea580c', '#0891b2', '#65a30d', '#be123c', '#0f766e'];
+        activeReflectionAxes.slice(1).forEach((axis, axisIndex) => {
+          ctx.save();
+          ctx.strokeStyle = additionalAxisColors[axisIndex % additionalAxisColors.length];
+          ctx.lineWidth = 2;
+          ctx.setLineDash([7, 5]);
+          ctx.beginPath();
+          if (axis === 'x') {
+            ctx.moveTo(0, originY);
+            ctx.lineTo(width, originY);
+          } else if (axis === 'y') {
+            ctx.moveTo(originX, 0);
+            ctx.lineTo(originX, height);
+          } else if (axis === 'y=x') {
+            ctx.moveTo(originX - 3000, originY + 3000);
+            ctx.lineTo(originX + 3000, originY - 3000);
+          } else if (axis === 'y=-x') {
+            ctx.moveTo(originX - 3000, originY - 3000);
+            ctx.lineTo(originX + 3000, originY + 3000);
+          } else if (axis === 'custom_x') {
+            const sx = originX + config.customAxisValue * scale;
+            ctx.moveTo(sx, 0);
+            ctx.lineTo(sx, height);
+          } else if (axis === 'custom_y') {
+            const sy = originY - config.customAxisValue * scale;
+            ctx.moveTo(0, sy);
+            ctx.lineTo(width, sy);
+          } else if (axis === 'general') {
+            const { a, b, c } = config.generalLine;
+            if (b !== 0) {
+              const y1 = (-a * minUnitX - c) / b;
+              const y2 = (-a * maxUnitX - c) / b;
+              const p1 = toScreen({ x: minUnitX, y: y1 }, width, height);
+              const p2 = toScreen({ x: maxUnitX, y: y2 }, width, height);
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+            } else if (a !== 0) {
+              const sx = originX + (-c / a) * scale;
+              ctx.moveTo(sx, 0);
+              ctx.lineTo(sx, height);
+            }
+          }
+          ctx.stroke();
+          ctx.restore();
+        });
+
+        // Placa elegante para el eje L
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#dc2626';
+        ctx.font = 'bold 13px "Inter", sans-serif';
+        let axisTitle = 'Eje L';
+        if (config.reflectionAxis === 'custom_x') axisTitle = `L: x = ${config.customAxisValue}`;
+        else if (config.reflectionAxis === 'custom_y') axisTitle = `L: y = ${config.customAxisValue}`;
+        else if (config.reflectionAxis === 'x') axisTitle = 'L: y = 0';
+        else if (config.reflectionAxis === 'y') axisTitle = 'L: x = 0';
+        else if (config.reflectionAxis === 'y=x') axisTitle = 'L: y = x';
+
+        ctx.fillStyle = 'rgba(254, 242, 242, 0.9)';
+        ctx.fillRect(20, height - 34, 110, 22);
+        ctx.strokeStyle = '#fecaca';
+        ctx.strokeRect(20, height - 34, 110, 22);
+        ctx.fillStyle = '#b91c1c';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(axisTitle, 75, height - 23);
         ctx.restore();
-      });
+      } else if (activePivot) {
+        // Centro Pivote GeoGebra
+        const cScr = toScreen(activePivot, width, height);
+        const color =
+          config.type === 'rotation'
+            ? '#d97706'
+            : config.type === 'homothety'
+            ? '#9333ea'
+            : '#0284c7';
 
-      // Placa elegante para el eje L
-      ctx.setLineDash([]);
-      ctx.fillStyle = '#dc2626';
-      ctx.font = 'bold 13px "Inter", sans-serif';
-      let axisTitle = 'Eje L';
-      if (config.reflectionAxis === 'custom_x') axisTitle = `L: x = ${config.customAxisValue}`;
-      else if (config.reflectionAxis === 'custom_y') axisTitle = `L: y = ${config.customAxisValue}`;
-      else if (config.reflectionAxis === 'x') axisTitle = 'L: y = 0';
-      else if (config.reflectionAxis === 'y') axisTitle = 'L: x = 0';
-      else if (config.reflectionAxis === 'y=x') axisTitle = 'L: y = x';
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cScr.x, cScr.y, (!isExport && isHoveringPivot) ? 14 : 10, 0, Math.PI * 2);
+        ctx.stroke();
 
-      ctx.fillStyle = 'rgba(254, 242, 242, 0.9)';
-      ctx.fillRect(20, height - 34, 110, 22);
-      ctx.strokeStyle = '#fecaca';
-      ctx.strokeRect(20, height - 34, 110, 22);
-      ctx.fillStyle = '#b91c1c';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(axisTitle, 75, height - 23);
-      ctx.restore();
-    } else if (activePivot) {
-      // Centro Pivote GeoGebra
-      const cScr = toScreen(activePivot, width, height);
-      const color =
-        config.type === 'rotation'
-          ? '#d97706'
-          : config.type === 'homothety'
-          ? '#9333ea'
-          : '#0284c7';
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(cScr.x, cScr.y, 4, 0, Math.PI * 2);
+        ctx.fill();
 
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(cScr.x, cScr.y, isHoveringPivot ? 14 : 10, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(cScr.x, cScr.y, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Etiqueta pivote con fondo blanco protector
-      ctx.font = 'bold 13px "Inter", sans-serif';
-      const pLabel = `C(${activePivot.x}, ${activePivot.y})`;
-      ctx.fillStyle = '#0f172a';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.strokeText(pLabel, cScr.x + 10, cScr.y - 8);
-      ctx.fillText(pLabel, cScr.x + 10, cScr.y - 8);
-      ctx.restore();
+        // Etiqueta pivote con fondo blanco protector
+        ctx.font = 'bold 13px "Inter", sans-serif';
+        const pLabel = showAxes ? `C(${activePivot.x}, ${activePivot.y})` : 'C';
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.strokeText(pLabel, cScr.x + 10, cScr.y - 8);
+        ctx.fillText(pLabel, cScr.x + 10, cScr.y - 8);
+        ctx.restore();
+      }
     }
 
     // 4. GUÍAS Y CONSTRUCCIONES MATEMÁTICAS ESTRICTAS
-    if ((toggles.showConstructionGuides || (config.type === 'reflection' && toggles.showReflectionDistances)) && vertices.length > 0) {
+    if (showTransformed && (toggles.showConstructionGuides || (config.type === 'reflection' && toggles.showReflectionDistances)) && vertices.length > 0) {
       const reflectionGuideColors = [
         '#dc2626', '#2563eb', '#16a34a', '#9333ea',
         '#ea580c', '#0891b2', '#be123c', '#65a30d'
@@ -1456,35 +1535,47 @@ export function Workspace({
         ctx.restore();
       }
 
-      // C) Rotación: Radios, arcos de trayectoria exacta, sector angular, símbolo de 90° y badge de ángulo
+      // C) Rotación: Radios, arcos de trayectoria exacta, sectores angulares concéntricos, símbolos de 90° y badges didácticos de ángulo
       if (config.type === 'rotation' && engineResult.constructionElements.rotationArcs && engineResult.constructionElements.rotationArcs.length > 0) {
         ctx.save();
         const arcs = engineResult.constructionElements.rotationArcs;
-        const cScr = toScreen(config.center, width, height);
-        const isScreenCCW = config.direction === 'anticlockwise';
+        const stageColors = isDarkMode
+          ? ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399', '#f472b6']
+          : ['#d97706', '#0284c7', '#7c3aed', '#059669', '#db2777'];
 
-        // 1. Dibujar trayectorias circulares para cada vértice (P -> P')
+        // 1. Dibujar trayectorias circulares para cada vértice en cada etapa (P -> P')
         arcs.forEach((g, idx) => {
+          const arcCenter = g.center || config.center;
+          const arcScr = toScreen(arcCenter, width, height);
+          const stepIdx = g.stepIndex ?? 0;
+          const stageColor = stageColors[stepIdx % stageColors.length];
+
           const s = toScreen(g.p, width, height);
           const e = toScreen(g.pPrime, width, height);
-          const rPx = Math.hypot(s.x - cScr.x, s.y - cScr.y);
+          const rPx = Math.hypot(s.x - arcScr.x, s.y - arcScr.y);
           if (rPx < 5) return;
 
-          const sAng = Math.atan2(s.y - cScr.y, s.x - cScr.x);
-          const eAng = Math.atan2(e.y - cScr.y, e.x - cScr.x);
+          // En pantalla (Canvas Y hacia abajo):
+          // - Giro Horario (g.angleDeg < 0): el ángulo en pantalla AUMENTA (isCCW = false).
+          // - Giro Antihorario (g.angleDeg > 0): el ángulo en pantalla DISMINUYE (isCCW = true).
+          const isCCW = g.counterClockwise;
+          const sweepRad = (Math.abs(g.angleDeg) * Math.PI) / 180;
+          const sAng = Math.atan2(s.y - arcScr.y, s.x - arcScr.x);
+          const eAng = isCCW ? sAng - sweepRad : sAng + sweepRad;
 
           // Radios r desde el centro C hasta P y P'
           ctx.beginPath();
-          ctx.moveTo(cScr.x, cScr.y);
+          ctx.moveTo(arcScr.x, arcScr.y);
           ctx.lineTo(s.x, s.y);
-          ctx.moveTo(cScr.x, cScr.y);
+          ctx.moveTo(arcScr.x, arcScr.y);
           ctx.lineTo(e.x, e.y);
-          if (idx === 0) {
-            ctx.strokeStyle = 'rgba(217, 119, 6, 0.75)';
-            ctx.lineWidth = 1.5;
+          const isPrimary = idx % Math.max(vertices.length, 1) === 0;
+          if (isPrimary) {
+            ctx.strokeStyle = stageColor;
+            ctx.lineWidth = 1.6;
             ctx.setLineDash([4, 3]);
           } else {
-            ctx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
+            ctx.strokeStyle = `${stageColor}55`;
             ctx.lineWidth = 1;
             ctx.setLineDash([3, 4]);
           }
@@ -1492,22 +1583,22 @@ export function Workspace({
 
           // Arco de trayectoria circular exacto (con radio rPx real del vértice)
           ctx.beginPath();
-          ctx.arc(cScr.x, cScr.y, rPx, sAng, eAng, isScreenCCW);
-          if (idx === 0) {
-            ctx.strokeStyle = '#d97706';
-            ctx.lineWidth = baseLW - 0.2;
+          ctx.arc(arcScr.x, arcScr.y, rPx, sAng, eAng, isCCW);
+          if (isPrimary) {
+            ctx.strokeStyle = stageColor;
+            ctx.lineWidth = baseLW;
             ctx.setLineDash([5, 3]);
           } else {
-            ctx.strokeStyle = 'rgba(217, 119, 6, 0.45)';
+            ctx.strokeStyle = `${stageColor}88`;
             ctx.lineWidth = 1.2;
             ctx.setLineDash([3, 3]);
           }
           ctx.stroke();
 
           // Flecha direccional en el punto de llegada e (P')
-          const tangAng = isScreenCCW ? eAng - Math.PI / 2 : eAng + Math.PI / 2;
-          const arrowLen = idx === 0 ? 8 : 6;
-          ctx.fillStyle = idx === 0 ? '#d97706' : 'rgba(217, 119, 6, 0.6)';
+          const tangAng = isCCW ? eAng - Math.PI / 2 : eAng + Math.PI / 2;
+          const arrowLen = isPrimary ? 9 : 7;
+          ctx.fillStyle = stageColor;
           ctx.setLineDash([]);
           ctx.beginPath();
           ctx.moveTo(e.x, e.y);
@@ -1523,61 +1614,75 @@ export function Workspace({
           ctx.fill();
         });
 
-        // 2. Indicador Didáctico Central del Ángulo de Giro (En el vértice de referencia A)
-        const refArc = arcs[0];
-        const sRef = toScreen(refArc.p, width, height);
-        const eRef = toScreen(refArc.pPrime, width, height);
-        const rRef = Math.hypot(sRef.x - cScr.x, sRef.y - cScr.y);
+        // 2. Indicadores Didácticos Centrales del Ángulo de Giro (Uno por cada giro sucesivo)
+        const stepIndices = Array.from(new Set(arcs.map((a) => a.stepIndex ?? 0))).sort((a, b) => a - b);
+        const totalSteps = stepIndices.length;
 
-        if (rRef >= 10 && config.angleDeg > 0) {
+        stepIndices.forEach((stepIdx) => {
+          const stepArc = arcs.find((a) => (a.stepIndex ?? 0) === stepIdx);
+          if (!stepArc || Math.abs(stepArc.angleDeg) < 0.1) return;
+
+          const arcCenter = stepArc.center || config.center;
+          const cScr = toScreen(arcCenter, width, height);
+          const sRef = toScreen(stepArc.p, width, height);
+          const rRef = Math.hypot(sRef.x - cScr.x, sRef.y - cScr.y);
+          if (rRef < 8) return;
+
+          const stageColor = stageColors[stepIdx % stageColors.length];
+          const isCCW = stepArc.counterClockwise;
+          const sweepRad = (Math.abs(stepArc.angleDeg) * Math.PI) / 180;
           const sAng = Math.atan2(sRef.y - cScr.y, sRef.x - cScr.x);
-          const eAng = Math.atan2(eRef.y - cScr.y, eRef.x - cScr.x);
-          const sectorR = Math.min(48, Math.max(30, rRef * 0.42));
+          const eAng = isCCW ? sAng - sweepRad : sAng + sweepRad;
 
-          // A) Sector sombreado translúcido entre rayo CA y rayo CA'
-          ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+          // Radio concéntrico diferenciado para cada giro (evita superposición visual si comparten centro)
+          const baseSectorR = Math.min(32, Math.max(22, rRef * 0.28));
+          const sectorStep = Math.min(18, Math.max(12, (rRef * 0.65 - baseSectorR) / Math.max(totalSteps, 1)));
+          const sectorR = baseSectorR + stepIdx * sectorStep;
+
+          // A) Sector sombreado translúcido entre los dos rayos
+          ctx.fillStyle = isDarkMode ? `${stageColor}2e` : `${stageColor}22`;
           ctx.beginPath();
           ctx.moveTo(cScr.x, cScr.y);
-          ctx.arc(cScr.x, cScr.y, sectorR, sAng, eAng, isScreenCCW);
+          ctx.arc(cScr.x, cScr.y, sectorR, sAng, eAng, isCCW);
           ctx.closePath();
           ctx.fill();
 
           // B) Borde del arco del ángulo con línea continua nítida
-          ctx.strokeStyle = '#d97706';
+          ctx.strokeStyle = stageColor;
           ctx.lineWidth = 2;
           ctx.setLineDash([]);
           ctx.beginPath();
-          ctx.arc(cScr.x, cScr.y, sectorR, sAng, eAng, isScreenCCW);
+          ctx.arc(cScr.x, cScr.y, sectorR, sAng, eAng, isCCW);
           ctx.stroke();
 
-          // Flecha en el arco del ángulo
-          const arcFrac = 0.85;
-          const arcArrowAng = isScreenCCW
-            ? sAng - ((config.angleDeg * Math.PI) / 180) * arcFrac
-            : sAng + ((config.angleDeg * Math.PI) / 180) * arcFrac;
-          const arcEndScr = {
-            x: cScr.x + sectorR * Math.cos(arcArrowAng),
-            y: cScr.y + sectorR * Math.sin(arcArrowAng)
-          };
-          const arcTang = isScreenCCW ? arcArrowAng - Math.PI / 2 : arcArrowAng + Math.PI / 2;
-          ctx.fillStyle = '#d97706';
-          ctx.beginPath();
-          ctx.moveTo(arcEndScr.x, arcEndScr.y);
-          ctx.lineTo(
-            arcEndScr.x - 6 * Math.cos(arcTang - Math.PI / 6),
-            arcEndScr.y - 6 * Math.sin(arcTang - Math.PI / 6)
-          );
-          ctx.lineTo(
-            arcEndScr.x - 6 * Math.cos(arcTang + Math.PI / 6),
-            arcEndScr.y - 6 * Math.sin(arcTang + Math.PI / 6)
-          );
-          ctx.closePath();
-          ctx.fill();
+          // Flecha en el arco del sector angular indicando la dirección de rotación
+          if (sweepRad > 0.25) {
+            const arcFrac = 0.85;
+            const arcArrowAng = isCCW ? sAng - sweepRad * arcFrac : sAng + sweepRad * arcFrac;
+            const arcEndScr = {
+              x: cScr.x + sectorR * Math.cos(arcArrowAng),
+              y: cScr.y + sectorR * Math.sin(arcArrowAng)
+            };
+            const arcTang = isCCW ? arcArrowAng - Math.PI / 2 : arcArrowAng + Math.PI / 2;
+            ctx.fillStyle = stageColor;
+            ctx.beginPath();
+            ctx.moveTo(arcEndScr.x, arcEndScr.y);
+            ctx.lineTo(
+              arcEndScr.x - 6 * Math.cos(arcTang - Math.PI / 6),
+              arcEndScr.y - 6 * Math.sin(arcTang - Math.PI / 6)
+            );
+            ctx.lineTo(
+              arcEndScr.x - 6 * Math.cos(arcTang + Math.PI / 6),
+              arcEndScr.y - 6 * Math.sin(arcTang + Math.PI / 6)
+            );
+            ctx.closePath();
+            ctx.fill();
+          }
 
           // C) Símbolo clásico de 90° (cuadradito perpendicular) si el ángulo es 90° o 270°
-          const isRightAngle = Math.abs(config.angleDeg % 180) === 90;
+          const isRightAngle = Math.abs(stepArc.angleDeg % 180) === 90;
           if (isRightAngle) {
-            const sqSize = 14;
+            const sqSize = Math.min(13, sectorR * 0.5);
             const u1 = { x: Math.cos(sAng), y: Math.sin(sAng) };
             const u2 = { x: Math.cos(eAng), y: Math.sin(eAng) };
             const p1 = { x: cScr.x + sqSize * u1.x, y: cScr.y + sqSize * u1.y };
@@ -1587,16 +1692,15 @@ export function Workspace({
             };
             const p2 = { x: cScr.x + sqSize * u2.x, y: cScr.y + sqSize * u2.y };
 
-            ctx.strokeStyle = '#b45309';
-            ctx.lineWidth = baseLW - 0.2;
+            ctx.strokeStyle = stageColor;
+            ctx.lineWidth = 1.6;
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(pCorner.x, pCorner.y);
             ctx.lineTo(p2.x, p2.y);
             ctx.stroke();
 
-            // Pequeño punto interior del ángulo recto
-            ctx.fillStyle = '#b45309';
+            ctx.fillStyle = stageColor;
             ctx.beginPath();
             ctx.arc(
               cScr.x + sqSize * 0.55 * (u1.x + u2.x),
@@ -1608,32 +1712,32 @@ export function Workspace({
             ctx.fill();
           }
 
-          // D) Placa / Badge Prominente del Ángulo (p. ej. "α = 90° ↺")
-          const cartStartAng = Math.atan2(refArc.p.y - config.center.y, refArc.p.x - config.center.x);
-          const deltaAng = (config.direction === 'clockwise' ? -1 : 1) * ((config.angleDeg * Math.PI) / 180);
-          const cartBisector = cartStartAng + deltaAng / 2;
-          const screenBisector = -cartBisector;
+          // D) Placa / Badge Prominente del Ángulo (p. ej. "α₁ = -90° ↻")
+          const bisectorAng = isCCW ? sAng - sweepRad / 2 : sAng + sweepRad / 2;
+          const badgeDist = sectorR + 24;
+          const badgeX = cScr.x + badgeDist * Math.cos(bisectorAng);
+          const badgeY = cScr.y + badgeDist * Math.sin(bisectorAng);
 
-          const badgeDist = sectorR + 26;
-          const badgeX = cScr.x + badgeDist * Math.cos(screenBisector);
-          const badgeY = cScr.y + badgeDist * Math.sin(screenBisector);
+          const dirSymbol = isCCW ? '↺' : '↻';
+          const signStr = isCCW ? '+' : '-';
+          const subIndices = ['₁', '₂', '₃', '₄', '₅', '₆'];
+          const subChar = subIndices[stepIdx] || `${stepIdx + 1}`;
+          const badgeText = totalSteps > 1
+            ? `α${subChar} = ${signStr}${Math.abs(stepArc.angleDeg)}° ${dirSymbol}`
+            : `α = ${signStr}${Math.abs(stepArc.angleDeg)}° ${dirSymbol}`;
 
-          const dirSymbol = config.direction === 'anticlockwise' ? '↺' : '↻';
-          const badgeText = `α = ${config.angleDeg}° ${dirSymbol}`;
-
-          ctx.font = 'bold 15px "Inter", sans-serif';
+          ctx.font = 'bold 13px "Inter", sans-serif';
           const tMetrics = ctx.measureText(badgeText);
           const bW = tMetrics.width + 16;
           const bH = 22;
 
-          // Dibujar cápsula con sombra
           ctx.save();
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.14)';
           ctx.shadowBlur = 6;
           ctx.shadowOffsetY = 2;
-          ctx.fillStyle = '#fffbeb';
-          ctx.strokeStyle = '#d97706';
-          ctx.lineWidth = 1.5;
+          ctx.fillStyle = isDarkMode ? '#0f172a' : '#ffffff';
+          ctx.strokeStyle = stageColor;
+          ctx.lineWidth = 1.8;
           ctx.beginPath();
           if (ctx.roundRect) {
             ctx.roundRect(badgeX - bW / 2, badgeY - bH / 2, bW, bH, 11);
@@ -1644,12 +1748,12 @@ export function Workspace({
           ctx.stroke();
           ctx.restore();
 
-          // Texto nítido del ángulo
-          ctx.fillStyle = '#78350f';
+          ctx.fillStyle = stageColor;
+          ctx.font = 'bold 13px "Inter", sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(badgeText, badgeX, badgeY);
-        }
+        });
 
         ctx.restore();
       }
@@ -1754,7 +1858,7 @@ export function Workspace({
     };
 
     // Las reflexiones adicionales se dibujan antes de la imagen principal para conservar su lectura visual.
-    if (additionalReflectionVertices.length > 0) {
+    if (showTransformed && additionalReflectionVertices.length > 0) {
       additionalReflectionVertices.forEach((image, imageIndex) => {
         const colors = additionalReflectionColors[imageIndex % additionalReflectionColors.length];
         ctx.save();
@@ -1821,7 +1925,7 @@ export function Workspace({
     // A) CASO 1: POLÍGONO CERRADO (isPolygon && vertices.length >= 3)
     if (isPolygon && vertices.length >= 3) {
       // Dibujar polígono F' transformado (relleno + borde)
-      if (transformedVertices.length >= 3) {
+      if (showTransformed && transformedVertices.length >= 3) {
         ctx.beginPath();
         const fPrime = toScreen(transformedVertices[0], width, height);
         ctx.moveTo(fPrime.x, fPrime.y);
@@ -1888,7 +1992,7 @@ export function Workspace({
       // Dibujar cada segmento declarado en `segments` (sin rellenar, sin cerrar a triángulo)
       segments.forEach(([a, b]) => {
         // Segmento en figura transformada F'
-        if (transformedVertices[a] && transformedVertices[b]) {
+        if (showTransformed && transformedVertices[a] && transformedVertices[b]) {
           const sA = toScreen(transformedVertices[a], width, height);
           const sB = toScreen(transformedVertices[b], width, height);
           ctx.strokeStyle = transStroke;
@@ -1932,6 +2036,7 @@ export function Workspace({
 
       // Línea elástica (rubber-band) si se está usando la herramienta Segmento
       if (
+        !isExport &&
         tool === 'segment' &&
         segmentStartVertex !== null &&
         vertices[segmentStartVertex] &&
@@ -1957,6 +2062,53 @@ export function Workspace({
         const stageColor = stageColors[stageIndex % stageColors.length];
         ctx.save();
         ctx.globalAlpha = 0.72;
+        ctx.strokeStyle = stageColor;
+        ctx.fillStyle = `${stageColor}18`;
+        ctx.lineWidth = baseLW + 0.1;
+        if (isPolygon && stage.length >= 3) {
+          ctx.beginPath();
+          const first = toScreen(stage[0], width, height);
+          ctx.moveTo(first.x, first.y);
+          stage.slice(1).forEach((point) => {
+            const screenPoint = toScreen(point, width, height);
+            ctx.lineTo(screenPoint.x, screenPoint.y);
+          });
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          segments.forEach(([from, to]) => {
+            if (!stage[from] || !stage[to]) return;
+            const start = toScreen(stage[from], width, height);
+            const end = toScreen(stage[to], width, height);
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+          });
+        }
+        if (toggles.showPoints) {
+          stage.forEach((point) => {
+            const screenPoint = toScreen(point, width, height);
+            ctx.beginPath();
+            ctx.arc(screenPoint.x, screenPoint.y, pRad - 0.8, 0, Math.PI * 2);
+            ctx.fillStyle = stageColor;
+            ctx.fill();
+          });
+        }
+        ctx.restore();
+      });
+    }
+
+    // D) ETAPAS INTERMEDIAS DE LA CADENA DE ROTACIONES SUCESIVAS.
+    if (config.type === 'rotation' && rotationStages.length > 1) {
+      const stageColors = isDarkMode
+        ? ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399', '#f472b6']
+        : ['#d97706', '#0284c7', '#7c3aed', '#059669', '#db2777'];
+      rotationStages.slice(0, -1).forEach((stage, stageIndex) => {
+        const stageColor = stageColors[stageIndex % stageColors.length];
+        ctx.save();
+        ctx.globalAlpha = 0.75;
         ctx.strokeStyle = stageColor;
         ctx.fillStyle = `${stageColor}18`;
         ctx.lineWidth = baseLW + 0.1;
@@ -2055,14 +2207,26 @@ export function Workspace({
       ctx.stroke();
     };
 
-    // 1. Vértices de F' (Transformada)
-    if (toggles.showPoints) transformedVertices.forEach((pt, i) => {
+    // 1. Vértices de F' (Transformada final)
+    if (showTransformed && toggles.showPoints) transformedVertices.forEach((pt, i) => {
       const pScr = toScreen(pt, width, height);
-      drawVertexMarker(pt, pRad - 0.5, transStroke);
+      const stageColors = isDarkMode
+        ? ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399', '#f472b6']
+        : ['#d97706', '#0284c7', '#7c3aed', '#059669', '#db2777'];
+      const finalVertexColor = config.type === 'rotation' && rotationStages.length > 0
+        ? stageColors[(rotationStages.length - 1) % stageColors.length]
+        : transStroke;
+
+      drawVertexMarker(pt, pRad - 0.5, finalVertexColor);
 
       if (showLabels && !(config.type === 'reflection' && toggles.showReflectionDistances)) {
-        const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
-        const labelText = `${cleanName}' (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
+        const cleanName = (vertices[i]?.label || pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
+        const primeSuffix = config.type === 'rotation' && rotationStages.length > 1
+          ? "'".repeat(rotationStages.length)
+          : "'";
+        const labelText = showAxes
+          ? `${cleanName}${primeSuffix} (${formatNum(pt.x)}, ${formatNum(pt.y)})`
+          : `${cleanName}${primeSuffix}`;
         ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
         const textWidth = ctx.measureText(labelText).width;
         const labelPosition = getLabelPosition(pScr, textWidth);
@@ -2071,17 +2235,50 @@ export function Workspace({
         ctx.strokeStyle = isDarkMode ? '#0b0f19' : 'rgba(255, 255, 255, 0.9)';
         ctx.lineWidth = 3;
         ctx.strokeText(labelText, labelPosition.x, labelPosition.y);
-        ctx.fillStyle = isDarkMode ? '#e9d5ff' : '#581c87';
+        ctx.fillStyle = finalVertexColor;
         ctx.fillText(labelText, labelPosition.x, labelPosition.y);
       }
     });
 
-    if (toggles.showPoints) secondaryTransformedVertices.forEach((pt, i) => {
+    // 1.b Vértices de etapas intermedias de rotación
+    if (showTransformed && config.type === 'rotation' && rotationStages.length > 1 && toggles.showPoints) {
+      const stageColors = isDarkMode
+        ? ['#f59e0b', '#38bdf8', '#a78bfa', '#34d399', '#f472b6']
+        : ['#d97706', '#0284c7', '#7c3aed', '#059669', '#db2777'];
+      rotationStages.slice(0, -1).forEach((stage, stageIndex) => {
+        const stageColor = stageColors[stageIndex % stageColors.length];
+        const primeSuffix = "'".repeat(stageIndex + 1);
+        stage.forEach((pt, i) => {
+          const pScr = toScreen(pt, width, height);
+          drawVertexMarker(pt, pRad - 0.8, stageColor);
+          if (showLabels) {
+            const baseName = (vertices[i]?.label || String.fromCharCode(65 + i)).replace(/'/g, '');
+            const labelText = showAxes
+              ? `${baseName}${primeSuffix} (${formatNum(pt.x)}, ${formatNum(pt.y)})`
+              : `${baseName}${primeSuffix}`;
+            ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
+            const textWidth = ctx.measureText(labelText).width;
+            const labelPosition = getLabelPosition(pScr, textWidth);
+            ctx.textAlign = labelPosition.align;
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = isDarkMode ? '#0b0f19' : 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 3;
+            ctx.strokeText(labelText, labelPosition.x, labelPosition.y);
+            ctx.fillStyle = stageColor;
+            ctx.fillText(labelText, labelPosition.x, labelPosition.y);
+          }
+        });
+      });
+    }
+
+    if (showTransformed && config.type !== 'rotation' && toggles.showPoints) secondaryTransformedVertices.forEach((pt, i) => {
       const pScr = toScreen(pt, width, height);
       drawVertexMarker(pt, pRad - 0.5, isDarkMode ? '#67e8f9' : '#0f766e');
       if (showLabels && !(config.type === 'reflection' && toggles.showReflectionDistances)) {
         const baseName = vertices[i]?.label || String.fromCharCode(65 + i);
-        const labelText = `${baseName}'' (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
+        const labelText = showAxes
+          ? `${baseName}'' (${formatNum(pt.x)}, ${formatNum(pt.y)})`
+          : `${baseName}''`;
         ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
         const textWidth = ctx.measureText(labelText).width;
         const labelPosition = getLabelPosition(pScr, textWidth);
@@ -2095,8 +2292,8 @@ export function Workspace({
     // 2. Vértices de F (Original)
     if (toggles.showPoints) vertices.forEach((pt, i) => {
       const pScr = toScreen(pt, width, height);
-      const isHovered = hoveredVertexIndex === i;
-      const isSegmentSelected = tool === 'segment' && segmentStartVertex === i;
+      const isHovered = !isExport && hoveredVertexIndex === i;
+      const isSegmentSelected = !isExport && tool === 'segment' && segmentStartVertex === i;
 
       // Resaltado visual si está seleccionado como inicio de segmento
       if (isSegmentSelected) {
@@ -2111,7 +2308,9 @@ export function Workspace({
 
       if (showLabels && !(config.type === 'reflection' && toggles.showReflectionDistances)) {
         const cleanName = (pt.label || String.fromCharCode(65 + i)).replace(/'/g, '');
-        const labelText = `${cleanName} (${formatNum(pt.x)}, ${formatNum(pt.y)})`;
+        const labelText = showAxes
+          ? `${cleanName} (${formatNum(pt.x)}, ${formatNum(pt.y)})`
+          : cleanName;
         ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
         const textWidth = ctx.measureText(labelText).width;
         const labelPosition = getLabelPosition(pScr, textWidth);
@@ -2369,37 +2568,218 @@ export function Workspace({
       ));
       vertices.forEach((point, index) => drawTopPointLabel(point, index, point.color || preStroke));
     }
+
+    // 5.b TRAZADO DE EJES DE SIMETRÍA (CORTES DE LA FIGURA)
+    if (showSymmetryAxes && symmetryResult.axes.length > 0) {
+      ctx.save();
+      symmetryResult.axes.forEach((axis, idx) => {
+        const isHighlighted = selectedSymmetryAxisId === 'all' || selectedSymmetryAxisId === axis.id;
+        if (!isHighlighted) return;
+
+        const s1 = toScreen(axis.p1, width, height);
+        const s2 = toScreen(axis.p2, width, height);
+
+        // 1. Línea discontinua de corte de simetría (estilo raya-punto)
+        ctx.save();
+        ctx.strokeStyle = axis.color;
+        ctx.lineWidth = selectedSymmetryAxisId === axis.id ? 3.2 : 2.2;
+        ctx.setLineDash([10, 5, 2, 5]);
+        ctx.beginPath();
+        ctx.moveTo(s1.x, s1.y);
+        ctx.lineTo(s2.x, s2.y);
+        ctx.stroke();
+
+        // 2. Badges en los extremos E_i
+        const labelText = `E${idx + 1}`;
+        [s1, s2].forEach((endPt) => {
+          const badgeR = 12;
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+          ctx.shadowBlur = 4;
+          ctx.shadowOffsetY = 1;
+          ctx.fillStyle = axis.color;
+          ctx.beginPath();
+          ctx.arc(endPt.x, endPt.y, badgeR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.lineWidth = 1.8;
+          ctx.strokeStyle = isDarkMode ? '#0f172a' : '#ffffff';
+          ctx.stroke();
+          ctx.restore();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px "Inter", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(labelText, endPt.x, endPt.y);
+        });
+
+        // 3. Etiqueta con la ecuación cerca de s2 si está seleccionado o son pocos cortes
+        if (selectedSymmetryAxisId === axis.id || symmetryResult.axes.length <= 4) {
+          const eqText = `${labelText}: ${axis.equation}`;
+          ctx.font = 'bold 11px "JetBrains Mono", monospace';
+          const textW = ctx.measureText(eqText).width;
+          const pillW = textW + 14;
+          const pillH = 22;
+
+          const dx = s1.x - s2.x;
+          const dy = s1.y - s2.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const badgeR = 12;
+          const offsetDist = Math.max(54, pillW / 2 + badgeR + 10);
+          const pillX = s2.x + (dx / dist) * offsetDist;
+          const pillY = s2.y + (dy / dist) * offsetDist;
+
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+          ctx.shadowBlur = 4;
+          ctx.shadowOffsetY = 1;
+          ctx.fillStyle = isDarkMode ? '#1e293b' : '#ffffff';
+          ctx.strokeStyle = axis.color;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(pillX - pillW / 2, pillY - pillH / 2, pillW, pillH, 6);
+          } else {
+            ctx.rect(pillX - pillW / 2, pillY - pillH / 2, pillW, pillH);
+          }
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+
+          ctx.fillStyle = axis.color;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(eqText, pillX, pillY);
+        }
+        ctx.restore();
+      });
+      ctx.restore();
+    }
+
+    // 6. CABECERA DIDÁCTICA SUPERIOR ELEGANTE (SÓLO PARA EXPORTACIÓN)
+    if (isExport && options.headerInfo) {
+      const hInfo = options.headerInfo;
+      ctx.save();
+      const hGrad = ctx.createLinearGradient(0, 0, width, 0);
+      hGrad.addColorStop(0, '#0f172a');
+      hGrad.addColorStop(0.5, '#1e293b');
+      hGrad.addColorStop(1, '#0f172a');
+      ctx.fillStyle = hGrad;
+      ctx.fillRect(0, 0, width, headerHeight);
+
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, headerHeight);
+      ctx.lineTo(width, headerHeight);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 15px "Inter", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('GeoTransform Pro', 24, headerHeight / 2 - 8);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px "Inter", sans-serif';
+      ctx.fillText('Laboratorio de Geometría Dinámica', 24, headerHeight / 2 + 10);
+
+      const centerTitle = hInfo.title?.trim()
+        ? (hInfo.title.length > 70 ? hInfo.title.slice(0, 68) + '...' : hInfo.title)
+        : (hInfo.type === 'rotation'
+          ? 'Rotación en el Plano Cartesiano'
+          : hInfo.type === 'translation'
+          ? 'Traslación Vectorial en el Plano'
+          : hInfo.type === 'reflection'
+          ? 'Simetría Axial en el Plano'
+          : hInfo.type === 'homothety'
+          ? 'Homotecia y Proporcionalidad'
+          : 'Simetría Central en el Plano');
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 13px "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(centerTitle, width / 2, headerHeight / 2);
+
+      const isTeacher = hInfo.variant === 'teacher';
+      const badgeText = isTeacher ? 'Guía Docente • Solución' : 'Hoja de Trabajo • Alumno';
+      const badgeBorder = isTeacher ? '#a855f7' : '#3b82f6';
+      const badgeBg = isTeacher ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)';
+      const badgeTextColor = isTeacher ? '#d8b4fe' : '#93c5fd';
+
+      ctx.font = 'bold 11px "Inter", sans-serif';
+      const bW = ctx.measureText(badgeText).width + 20;
+      const bH = 26;
+      const bX = width - bW - 24;
+      const bY = (headerHeight - bH) / 2;
+
+      ctx.fillStyle = badgeBg;
+      ctx.strokeStyle = badgeBorder;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(bX, bY, bW, bH, 8);
+      } else {
+        ctx.rect(bX, bY, bW, bH);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = badgeTextColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(badgeText, bX + bW / 2, bY + bH / 2);
+      ctx.restore();
+    }
   }, [
-    isActive,
-    canvasDimensions,
-    isSidebarOpen,
+    lineThickness,
+    pointSize,
+    isDarkMode,
+    gridStyle,
+    config,
+    engineResult,
     vertices,
-    segments,
-    isPolygon,
-    segmentStartVertex,
-    mouseCoord,
     transformedVertices,
     secondaryTransformedVertices,
     ...translationStages.flat(),
     translationStages,
+    ...rotationStages.flat(),
+    rotationStages,
     additionalReflectionVertices,
     additionalReflectionGuides,
     activeReflectionAxes,
-    gridStyle,
-    scale,
-    pan,
-    showLabels,
-    toggles,
-    config,
-    engineResult,
-    toScreen,
-    activePivot,
+    segments,
+    isPolygon,
+    segmentStartVertex,
+    mouseCoord,
+    tool,
     hoveredVertexIndex,
     isHoveringPivot,
-    isDarkMode,
-    pointSize,
-    lineThickness
+    isHoveringReflectionLine,
+    activePivot,
+    showLabels,
+    toggles,
+    showSymmetryAxes,
+    selectedSymmetryAxisId,
+    symmetryResult
   ]);
+
+  // RENDERIZADO DEL LIENZO INTERACTIVO
+  useEffect(() => {
+    if (!isActive) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = canvasDimensions.width || rect.width;
+    const height = canvasDimensions.height || rect.height;
+
+    if (width <= 0 || height <= 0) return;
+
+    drawGeometryPlane(canvas, width, height, scale, pan, dpr, { isExport: false });
+  }, [isActive, canvasDimensions, drawGeometryPlane, scale, pan]);
 
   // LÓGICA DE INTERACCIÓN UNIFICADA (MOUSE Y TOUCH TÁCTIL)
   const handleInteractionStart = (
@@ -2625,6 +3005,7 @@ export function Workspace({
 
     if (draggingVertexIndexRef.current !== null) {
       const idx = draggingVertexIndexRef.current;
+      setActiveAutoformaId(null);
       setVertices((prev) =>
         prev.map((v, i) => (i === idx ? { ...v, x: cart.x, y: cart.y } : v))
       );
@@ -2785,7 +3166,7 @@ export function Workspace({
   };
 
   // Estado para alertas o notificaciones de proyecto (toast flotante)
-  const [projectToast, setProjectToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [projectToast, setProjectToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const HISTORY_LIMIT = 10;
   const [backups, setBackups] = useState<GeoProjectData[]>(() => {
@@ -2809,7 +3190,7 @@ export function Workspace({
     setSelectedHistoryIndex((prev) => Math.min(prev, backups.length - 1));
   }, [backups.length]);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setProjectToast({ message, type });
     setTimeout(() => {
       setProjectToast(null);
@@ -2836,11 +3217,13 @@ export function Workspace({
     isPolygon,
     config,
     gridStyle,
+    showAxes: toggles.showAxes !== false,
+    showTransformedImage: toggles.showTransformedImage !== false,
     scale,
     pan,
     customStatement,
     problemMode
-  }), [vertices, segments, isPolygon, config, gridStyle, scale, pan, customStatement, problemMode]);
+  }), [vertices, segments, isPolygon, config, gridStyle, toggles.showAxes, scale, pan, customStatement, problemMode]);
 
   const saveCurrentProjectToHistory = useCallback((title?: string, notify = true) => {
     const snapshot = buildSnapshot(title || `Copia ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
@@ -2881,6 +3264,12 @@ export function Workspace({
     if (typeof snapshot.isPolygon === 'boolean') setIsPolygon(snapshot.isPolygon);
     if (snapshot.config) setConfig(snapshot.config);
     if (snapshot.gridStyle) setGridStyle(snapshot.gridStyle);
+    if (typeof snapshot.showAxes === 'boolean') {
+      setToggles((prev) => ({ ...prev, showAxes: snapshot.showAxes }));
+    }
+    if (typeof snapshot.showTransformedImage === 'boolean') {
+      setToggles((prev) => ({ ...prev, showTransformedImage: snapshot.showTransformedImage }));
+    }
     if (typeof snapshot.scale === 'number') setScale(snapshot.scale);
     if (snapshot.pan) setPan(snapshot.pan);
     if (snapshot.customStatement) setCustomStatement(snapshot.customStatement);
@@ -2889,304 +3278,310 @@ export function Workspace({
     showToast(`Se restauró la copia "${snapshot.title || 'Sin título'}".`, 'success');
   }, []);
 
-  const getExportGeometryBounds = useCallback(() => {
-    const width = canvasDimensions.width || 1200;
-    const height = canvasDimensions.height || 700;
+  // CALCULAR LÍMITES GEOMÉTRICOS EXACTOS DE TODAS LAS FIGURAS Y ELEMENTOS EN EL PLANO
+  const computeGeometryBounds = useCallback(() => {
     const rawPoints: Point[] = [
       ...vertices,
       ...transformedVertices,
       ...secondaryTransformedVertices,
+      ...rotationStages.flat(),
       ...additionalReflectionVertices.flat(),
-      ...(activePivot ? [activePivot] : []),
-      ...segments.flatMap(([from, to]) => [vertices[from], vertices[to]]).filter(Boolean) as Point[]
+      ...(activePivot ? [activePivot] : [])
     ];
 
     const construction = engineResult.constructionElements;
     construction.vectorGuides?.forEach((guide) => rawPoints.push(guide.start, guide.intermediate, guide.end));
     construction.perpendicularGuides?.forEach((guide) => rawPoints.push(guide.p, guide.footH, guide.pPrime));
-    construction.rotationArcs?.forEach((arc) => rawPoints.push(arc.center, arc.p, arc.pPrime));
+    construction.rotationArcs?.forEach((arc) => {
+      rawPoints.push(arc.center, arc.p, arc.pPrime);
+      const r = arc.radius || Math.hypot(arc.p.x - arc.center.x, arc.p.y - arc.center.y);
+      if (r > 0 && r < 50) {
+        rawPoints.push(
+          { x: arc.center.x - r * 0.8, y: arc.center.y - r * 0.8 },
+          { x: arc.center.x + r * 0.8, y: arc.center.y + r * 0.8 }
+        );
+      }
+    });
     construction.homothetyRays?.forEach((ray) => rawPoints.push(ray.center, ray.p, ray.pPrime));
-    construction.centralSymmetrySegments?.forEach((segment) => rawPoints.push(segment.center, segment.p, segment.pPrime));
+    construction.centralSymmetrySegments?.forEach((seg) => rawPoints.push(seg.center, seg.p, seg.pPrime));
 
+    if (showSymmetryAxes && symmetryResult.axes.length > 0) {
+      symmetryResult.axes.forEach((axis) => {
+        rawPoints.push(axis.p1, axis.p2);
+      });
+    }
+
+    // Si no hay puntos, devolver vista estándar simétrica alrededor del origen
     if (rawPoints.length === 0) {
       return {
-        width,
-        height,
-        center: { x: 0, y: 0 },
+        centerX: 0,
+        centerY: 0,
+        spanX: 16,
+        spanY: 12,
         minX: -8,
         maxX: 8,
-        minY: -8,
-        maxY: 8
+        minY: -6,
+        maxY: 6
       };
     }
 
-    const xs = rawPoints.map((point) => point.x);
-    const ys = rawPoints.map((point) => point.y);
+    const xs = rawPoints.map((p) => p.x).filter(Number.isFinite);
+    const ys = rawPoints.map((p) => p.y).filter(Number.isFinite);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
-    const padding = Math.max(4, Math.abs(maxX - minX) * 0.35, Math.abs(maxY - minY) * 0.35, 6);
+
+    const spanX = Math.max(1, maxX - minX);
+    const spanY = Math.max(1, maxY - minY);
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
 
     return {
-      width,
-      height,
-      center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
-      minX: minX - padding,
-      maxX: maxX + padding,
-      minY: minY - padding,
-      maxY: maxY + padding
+      centerX,
+      centerY,
+      spanX,
+      spanY,
+      minX,
+      maxX,
+      minY,
+      maxY
     };
-  }, [activePivot, additionalReflectionVertices, canvasDimensions.height, canvasDimensions.width, engineResult.constructionElements, scale, segments, secondaryTransformedVertices, transformedVertices, vertices]);
+  }, [
+    vertices,
+    transformedVertices,
+    secondaryTransformedVertices,
+    rotationStages,
+    additionalReflectionVertices,
+    activePivot,
+    engineResult.constructionElements,
+    showSymmetryAxes,
+    symmetryResult.axes
+  ]);
 
-  const renderExportScene = useCallback((targetCanvas: HTMLCanvasElement, variant: 'student' | 'teacher' = 'student') => {
-    const ctx = targetCanvas.getContext('2d');
-    if (!ctx) return;
+  // CÁLCULO DE AUTO-ENCUADRE AUTOMÁTICO PARA EXPORTACIÓN PERFECTAMENTE CENTRADA
+  const getAutoFramingForExport = useCallback((
+    targetWidth: number = 1600,
+    targetHeight: number = 1000,
+    headerHeight: number = 56
+  ) => {
+    const bounds = computeGeometryBounds();
+    const availW = targetWidth - 120; // 60px margen horizontal a cada lado
+    const availH = targetHeight - headerHeight - 120; // 60px margen vertical
 
-    const bounds = getExportGeometryBounds();
-    const dpr = window.devicePixelRatio || 1;
-    const baseWidth = Math.max(1200, Math.ceil((bounds.maxX - bounds.minX) * scale + 320));
-    const baseHeight = Math.max(820, Math.ceil((bounds.maxY - bounds.minY) * scale + 260));
-    const exportWidth = Math.min(1800, baseWidth);
-    const exportHeight = Math.min(1200, Math.max(baseHeight, Math.round(exportWidth * 0.72)));
+    // Generoso padding en unidades cartesianas para que las etiquetas, coordenadas y arcos nunca toquen el borde
+    const padX = Math.max(2.8, bounds.spanX * 0.22);
+    const padY = Math.max(2.8, bounds.spanY * 0.22);
+    const totalSpanX = Math.max(12, bounds.spanX + padX * 2);
+    const totalSpanY = Math.max(8.5, bounds.spanY + padY * 2);
 
-    const headerHeight = 110;
-    const leftPanelWidth = 260;
-    const boardX = 336;
-    const boardY = headerHeight + 28;
-    const boardWidth = exportWidth - 392;
-    const boardHeight = exportHeight - headerHeight - 102;
-    const boardInnerX = boardX + 20;
-    const boardInnerY = boardY + 20;
-    const boardInnerWidth = boardWidth - 40;
-    const boardInnerHeight = boardHeight - 40;
-    const originX = boardInnerX + boardInnerWidth / 2;
-    const originY = boardInnerY + boardInnerHeight / 2;
-    const exportTitle = customStatement?.trim() ? customStatement.trim().slice(0, 84) : 'Hoja de trabajo de transformaciones geométricas';
-    const summaryText = config.type === 'reflection'
-      ? 'Reflexiona la figura respecto a un eje y comprueba la congruencia entre puntos y sus imágenes.'
-      : config.type === 'translation'
-        ? 'Traslada la figura según un vector y verifica cómo cambian las coordenadas de cada punto.'
-        : config.type === 'rotation'
-          ? 'Gira la figura alrededor de un centro y analiza el ángulo y la orientación.'
-          : config.type === 'central_reflection'
-            ? 'Aplica una simetría central respecto al centro para estudiar la imagen invertida.'
-            : 'Realiza una homotecia desde un centro y compara el tamaño y la proporción.';
-    const teacherHint = variant === 'teacher'
-      ? 'Orientación docente: señala el eje, centro o vector, identifica la transformación y justifica la congruencia o semejanza.'
-      : 'Resuelve la actividad observando la figura, su imagen y la relación entre los puntos.';
+    const scaleX = availW / totalSpanX;
+    const scaleY = availH / totalSpanY;
+    let autoScale = Math.min(scaleX, scaleY);
+    autoScale = Math.max(18, Math.min(54, Math.round(autoScale * 10) / 10));
 
-    const toExport = (point: { x: number; y: number }) => ({
-      x: originX + (point.x - bounds.center.x) * scale,
-      y: originY - (point.y - bounds.center.y) * scale
-    });
+    const panX = -bounds.centerX * autoScale;
+    const panY = bounds.centerY * autoScale;
 
-    const minUnitX = Math.floor((bounds.minX - 2) * 1.5);
-    const maxUnitX = Math.ceil((bounds.maxX + 2) * 1.5);
-    const minUnitY = Math.floor((bounds.minY - 2) * 1.5);
-    const maxUnitY = Math.ceil((bounds.maxY + 2) * 1.5);
+    return {
+      scale: autoScale,
+      pan: { x: panX, y: panY }
+    };
+  }, [computeGeometryBounds]);
 
-    targetCanvas.width = Math.round(exportWidth * dpr);
-    targetCanvas.height = Math.round(exportHeight * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // ENCUADRE AUTOMÁTICO EN LA PIZARRA INTERACTIVA
+  const handleAutoFitView = useCallback(() => {
+    const width = canvasDimensions.width || 1200;
+    const height = canvasDimensions.height || 700;
+    const bounds = computeGeometryBounds();
+    const availW = width - 120;
+    const availH = height - 120;
+    const padX = Math.max(2.5, bounds.spanX * 0.22);
+    const padY = Math.max(2.5, bounds.spanY * 0.22);
+    const totalSpanX = Math.max(12, bounds.spanX + padX * 2);
+    const totalSpanY = Math.max(8.5, bounds.spanY + padY * 2);
+    let fitScale = Math.min(availW / totalSpanX, availH / totalSpanY);
+    fitScale = Math.max(20, Math.min(55, Math.round(fitScale)));
+    const panX = -bounds.centerX * fitScale;
+    const panY = bounds.centerY * fitScale;
+    setScale(fitScale);
+    setPan({ x: panX, y: panY });
+    showToast('Plano centrado y encuadrado automáticamente en las figuras', 'info');
+  }, [canvasDimensions.width, canvasDimensions.height, computeGeometryBounds, showToast]);
 
-    const bgGradient = ctx.createLinearGradient(0, 0, exportWidth, exportHeight);
-    bgGradient.addColorStop(0, isDarkMode ? '#07111d' : '#f5f9ff');
-    bgGradient.addColorStop(1, isDarkMode ? '#111827' : '#edf5ff');
-    ctx.fillStyle = bgGradient;
-    ctx.fillRect(0, 0, exportWidth, exportHeight);
-
-    const headerGradient = ctx.createLinearGradient(0, 0, exportWidth, headerHeight);
-    headerGradient.addColorStop(0, isDarkMode ? '#0f172a' : '#1d4ed8');
-    headerGradient.addColorStop(1, isDarkMode ? '#111827' : '#2563eb');
-    ctx.fillStyle = headerGradient;
-    ctx.fillRect(0, 0, exportWidth, headerHeight);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(0, headerHeight - 1, exportWidth, 1);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 30px "Inter", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('GeoTransform Pro', 54, 58);
-
-    ctx.font = '13px "Inter", sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fillText('Hoja de trabajo • geometría dinámica', 54, 84);
-
-    const badgeX = exportWidth - 220;
-    const badgeY = 32;
-    const badgeWidth = 150;
-    const badgeHeight = 42;
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
-    ctx.strokeStyle = 'rgba(255,255,255,0.26)';
-    ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeHeight);
-    ctx.fillStyle = '#dbeafe';
-    ctx.font = 'bold 11px "Inter", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(config.type.toUpperCase(), badgeX + badgeWidth / 2, badgeY + 26);
-
-    ctx.fillStyle = isDarkMode ? 'rgba(15, 23, 42, 0.8)' : 'rgba(255,255,255,0.82)';
-    ctx.fillRect(50, 120, leftPanelWidth, exportHeight - 180);
-    ctx.strokeStyle = isDarkMode ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.35)';
-    ctx.strokeRect(50, 120, leftPanelWidth, exportHeight - 180);
-
-    ctx.fillStyle = '#3b82f6';
-    ctx.font = 'bold 11px "Inter", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('TÍTULO', 72, 154);
-    ctx.fillStyle = isDarkMode ? '#f8fafc' : '#0f172a';
-    ctx.font = 'bold 26px "Inter", sans-serif';
-    const titleLines = exportTitle.match(/.{1,20}/g) || [exportTitle];
-    titleLines.slice(0, 3).forEach((line, index) => {
-      ctx.fillText(line, 72, 188 + index * 28);
-    });
-
-    ctx.fillStyle = '#3b82f6';
-    ctx.font = 'bold 11px "Inter", sans-serif';
-    ctx.fillText(variant === 'teacher' ? 'OBJETIVO DOCENTE' : 'OBJETIVO', 72, 290);
-    ctx.fillStyle = isDarkMode ? '#e2e8f0' : '#334155';
-    ctx.font = '13px "Inter", sans-serif';
-    const objectiveText = variant === 'teacher'
-      ? [
-          'Guiar la observación de la figura.',
-          'Relacionar la transformación con sus propiedades.',
-          'Validar la argumentación matemática.'
-        ]
-      : [
-          'Analizar la figura original y su imagen.',
-          'Identificar el tipo de transformación.',
-          'Comprobar propiedades y relaciones.'
-        ];
-    objectiveText.forEach((line, index) => {
-      ctx.fillText(line, 72, 314 + index * 18);
-    });
-
-    ctx.fillStyle = '#3b82f6';
-    ctx.font = 'bold 11px "Inter", sans-serif';
-    ctx.fillText(variant === 'teacher' ? 'ORIENTACIÓN' : 'DESAFÍO', 72, 390);
-    ctx.fillStyle = isDarkMode ? '#cbd5e1' : '#475569';
-    ctx.font = '13px "Inter", sans-serif';
-    const wrappedSummary = (variant === 'teacher' ? teacherHint : summaryText).match(/.{1,28}/g) || [(variant === 'teacher' ? teacherHint : summaryText)];
-    wrappedSummary.slice(0, 5).forEach((line, index) => {
-      ctx.fillText(line, 72, 414 + index * 18);
-    });
-
-    ctx.fillStyle = '#3b82f6';
-    ctx.font = 'bold 11px "Inter", sans-serif';
-    ctx.fillText(variant === 'teacher' ? 'EVIDENCIA' : 'COMPLETA', 72, 510);
-    ctx.fillStyle = isDarkMode ? '#f8fafc' : '#0f172a';
-    ctx.fillRect(72, 528, 140, 30);
-    ctx.strokeStyle = isDarkMode ? 'rgba(148, 163, 184, 0.3)' : 'rgba(148,163,184,0.42)';
-    ctx.strokeRect(72, 528, 140, 30);
-    ctx.fillStyle = '#3b82f6';
-    ctx.font = 'bold 12px "Inter", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(variant === 'teacher' ? 'Guía' : 'Ejercicio', 142, 548);
-    ctx.textAlign = 'left';
-
-    ctx.fillStyle = isDarkMode ? 'rgba(15, 23, 42, 0.82)' : 'rgba(255,255,255,0.82)';
-    ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
-    ctx.strokeStyle = isDarkMode ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.35)';
-    ctx.strokeRect(boardX, boardY, boardWidth, boardHeight);
-
-    ctx.fillStyle = isDarkMode ? 'rgba(15,23,42,0.25)' : 'rgba(37, 99, 235, 0.06)';
-    ctx.fillRect(boardInnerX, boardInnerY, boardInnerWidth, boardInnerHeight);
-
-    ctx.strokeStyle = isDarkMode ? '#1e293b' : '#dfeaf6';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let u = minUnitX; u <= maxUnitX; u++) {
-      const x = originX + u * scale;
-      ctx.moveTo(x, boardInnerY);
-      ctx.lineTo(x, boardInnerY + boardInnerHeight);
+  // Cargar Autoforma desde el explorador de simetría
+  const handleLoadAutoforma = useCallback((preset: WordAutoformaPreset) => {
+    commitAction();
+    setVertices(preset.vertices);
+    setIsPolygon(true);
+    const segs: [number, number][] = [];
+    for (let i = 0; i < preset.vertices.length; i++) {
+      segs.push([i, (i + 1) % preset.vertices.length]);
     }
-    for (let u = minUnitY; u <= maxUnitY; u++) {
-      const y = originY - u * scale;
-      ctx.moveTo(boardInnerX, y);
-      ctx.lineTo(boardInnerX + boardInnerWidth, y);
+    setSegments(segs);
+    setSegmentStartVertex(null);
+    setActiveAutoformaId(preset.id);
+    setShapeRotationAngle(0);
+    setShowSymmetryAxes(true);
+    setSelectedSymmetryAxisId('all');
+    setToggles((prev) => ({ ...prev, showTransformedImage: false }));
+    setConfig((prev) => ({
+      ...prev,
+      type: 'reflection',
+      reflectionAxis: 'y',
+      customAxisValue: 0,
+      reflectionAxes: ['y'],
+      translationTarget: undefined,
+      translationTargets: [],
+      translationReady: true
+    }));
+    setTool('select');
+    setTimeout(() => {
+      handleAutoFitView();
+    }, 60);
+    showToast(`Autoforma "${preset.name}" cargada: figura única con ${preset.isInfinite ? 'infinitos ejes (∞)' : `${preset.symmetryCount} ${preset.symmetryCount === 1 ? 'eje' : 'ejes'} de simetría máximos`}.`, 'info');
+  }, [commitAction, handleAutoFitView, showToast]);
+
+  // Rotar la figura en su lugar alrededor del centroide / origen (sin duplicar ni sobremontar)
+  const handleRotateFigureInPlace = useCallback((deltaAngleDeg: number) => {
+    if (vertices.length === 0) return;
+    commitAction();
+
+    let sumX = 0, sumY = 0;
+    for (const v of vertices) {
+      sumX += v.x;
+      sumY += v.y;
     }
-    ctx.stroke();
+    const rawCx = sumX / vertices.length;
+    const rawCy = sumY / vertices.length;
+    // Si la figura está centrada en torno al origen, anclar a (0,0) para mantener simetría cartesiana exacta
+    const cx = Math.abs(rawCx) < 0.35 ? 0 : rawCx;
+    const cy = Math.abs(rawCy) < 0.35 ? 0 : rawCy;
 
-    ctx.strokeStyle = isDarkMode ? '#475569' : '#334155';
-    ctx.beginPath();
-    ctx.moveTo(boardInnerX, originY);
-    ctx.lineTo(boardInnerX + boardInnerWidth, originY);
-    ctx.moveTo(originX, boardInnerY);
-    ctx.lineTo(originX, boardInnerY + boardInnerHeight);
-    ctx.stroke();
+    const rad = (deltaAngleDeg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
 
-    const drawPoint = (point: Point, color: string, radius = 5, label?: string) => {
-      const p = toExport(point);
-      ctx.beginPath();
-      ctx.fillStyle = color;
-      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-      ctx.fill();
-      if (label) {
-        ctx.font = 'bold 12px "Inter", sans-serif';
-        ctx.fillStyle = isDarkMode ? '#e2e8f0' : '#0f172a';
-        ctx.fillText(label, p.x + 8, p.y - 8);
+    const newVertices = vertices.map((v) => {
+      const dx = v.x - cx;
+      const dy = v.y - cy;
+      const rx = cx + dx * cos - dy * sin;
+      const ry = cy + dx * sin + dy * cos;
+      return {
+        ...v,
+        x: Number(rx.toFixed(2)),
+        y: Number(ry.toFixed(2)),
+      };
+    });
+
+    setVertices(newVertices);
+    const newAngle = ((shapeRotationAngle + deltaAngleDeg) % 360 + 360) % 360;
+    setShapeRotationAngle(newAngle);
+    showToast(`Figura rotada ${deltaAngleDeg > 0 ? `+${deltaAngleDeg}°` : `${deltaAngleDeg}°`} en su lugar`, 'info');
+  }, [vertices, shapeRotationAngle, commitAction, showToast]);
+
+  // Orientar la figura hacia una dirección cardinal específica (Arriba, Abajo, Izquierda, Derecha)
+  const handleOrientFigure = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    if (vertices.length === 0) return;
+    const directionAngles: Record<'right' | 'up' | 'left' | 'down', number> = {
+      right: 0,
+      up: 90,
+      left: 180,
+      down: 270,
+    };
+    const targetAngle = directionAngles[direction];
+    let deltaAngle = ((targetAngle - shapeRotationAngle) % 360 + 360) % 360;
+    if (deltaAngle > 180) deltaAngle -= 360;
+    if (deltaAngle === 0) {
+      showToast(`La figura ya está orientada hacia ${direction === 'up' ? 'arriba' : direction === 'down' ? 'abajo' : direction === 'left' ? 'la izquierda' : 'la derecha'}.`, 'info');
+      return;
+    }
+    handleRotateFigureInPlace(deltaAngle);
+  }, [vertices.length, shapeRotationAngle, handleRotateFigureInPlace, showToast]);
+
+  // Aplicar un corte de simetría como eje de reflexión activo L
+  const handleApplyAsReflectionAxis = useCallback((axis: SymmetryAxis) => {
+    commitAction();
+    setToggles((prev) => ({ ...prev, showTransformedImage: true }));
+    if (axis.type === 'vertical') {
+      const val = Math.abs(axis.p1.x) < 0.05 ? 0 : Math.round(axis.p1.x);
+      setConfig((prev) => ({
+        ...prev,
+        type: 'reflection',
+        reflectionAxis: val === 0 ? 'y' : 'custom_x',
+        customAxisValue: val,
+        reflectionAxes: [val === 0 ? 'y' : 'custom_x']
+      }));
+    } else if (axis.type === 'horizontal') {
+      const val = Math.abs(axis.p1.y) < 0.05 ? 0 : Math.round(axis.p1.y);
+      setConfig((prev) => ({
+        ...prev,
+        type: 'reflection',
+        reflectionAxis: val === 0 ? 'x' : 'custom_y',
+        customAxisValue: val,
+        reflectionAxes: [val === 0 ? 'x' : 'custom_y']
+      }));
+    } else if (axis.equation === 'y = x') {
+      setConfig((prev) => ({
+        ...prev,
+        type: 'reflection',
+        reflectionAxis: 'y=x',
+        reflectionAxes: ['y=x']
+      }));
+    } else if (axis.equation === 'y = -x') {
+      setConfig((prev) => ({
+        ...prev,
+        type: 'reflection',
+        reflectionAxis: 'y=-x',
+        reflectionAxes: ['y=-x']
+      }));
+    } else {
+      const rad = (axis.angleDeg * Math.PI) / 180;
+      const a = Math.sin(rad);
+      const b = -Math.cos(rad);
+      const c = -(a * symmetryResult.centroid.x + b * symmetryResult.centroid.y);
+      setConfig((prev) => ({
+        ...prev,
+        type: 'reflection',
+        reflectionAxis: 'general',
+        generalLine: { a: Number(a.toFixed(4)), b: Number(b.toFixed(4)), c: Number(c.toFixed(4)) },
+        reflectionAxes: ['general']
+      }));
+    }
+    showToast(`Eje de reflexión L fijado en ${axis.name} (${axis.equation}). ¡La figura coincide consigo misma!`, 'success');
+  }, [commitAction, symmetryResult.centroid, showToast]);
+
+  // CREAR LIENZO DE ALTA RESOLUCIÓN AUTO-ENCUADRADO PARA EXPORTACIÓN
+  const createExportCanvas = useCallback((variant: 'student' | 'teacher' = 'student') => {
+    const exportWidth = 1600;
+    const exportHeight = 1000;
+    const headerHeight = 56;
+    const framing = getAutoFramingForExport(exportWidth, exportHeight, headerHeight);
+    const dpr = 2; // Resolución Retina ultra-nítida
+    const exportCanvas = document.createElement('canvas');
+
+    drawGeometryPlane(
+      exportCanvas,
+      exportWidth,
+      exportHeight,
+      framing.scale,
+      framing.pan,
+      dpr,
+      {
+        isExport: true,
+        headerInfo: {
+          title: customStatement,
+          type: config.type,
+          variant
+        }
       }
-    };
+    );
 
-    const renderSegment = (a: Point, b: Point, color: string) => {
-      const start = toExport(a);
-      const end = toExport(b);
-      ctx.beginPath();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2.6;
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.stroke();
-    };
-
-    if (segments.length > 0) {
-      segments.forEach(([from, to]) => {
-        const a = vertices[from];
-        const b = vertices[to];
-        if (a && b) renderSegment(a, b, '#2563eb');
-      });
-    }
-
-    if (vertices.length > 0) {
-      vertices.forEach((point, index) => {
-        drawPoint(point, '#2563eb', 5, point.label || String.fromCharCode(65 + index));
-      });
-    }
-
-    if (transformedVertices.length > 0) {
-      transformedVertices.forEach((point, index) => {
-        drawPoint(point, '#f59e0b', 4, `${point.label || String.fromCharCode(65 + index)}'`);
-      });
-    }
-
-    if (showLabels) {
-      const labelPoints = [...vertices, ...transformedVertices, ...secondaryTransformedVertices];
-      labelPoints.forEach((point) => {
-        const p = toExport(point);
-        ctx.fillStyle = isDarkMode ? '#f8fafc' : '#111827';
-        ctx.font = 'bold 11px "Inter", sans-serif';
-        ctx.fillText(`${point.label || 'P'} (${formatNum(point.x)}, ${formatNum(point.y)})`, p.x + 10, p.y - 10);
-      });
-    }
-
-    const footerX = exportWidth - 360;
-    const footerY = exportHeight - 52;
-    ctx.fillStyle = isDarkMode ? 'rgba(15, 23, 42, 0.84)' : 'rgba(255,255,255,0.82)';
-    ctx.fillRect(footerX, footerY, 290, 26);
-    ctx.strokeStyle = isDarkMode ? 'rgba(96, 165, 250, 0.4)' : 'rgba(37,99,235,0.24)';
-    ctx.strokeRect(footerX, footerY, 290, 26);
-    ctx.fillStyle = '#3b82f6';
-    ctx.font = 'bold 11px "Inter", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('contenido geométrico localizado automáticamente para exportación', footerX + 145, footerY + 17);
-  }, [config.type, getExportGeometryBounds, isDarkMode, scale, segments, secondaryTransformedVertices, showLabels, transformedVertices, vertices]);
+    return exportCanvas;
+  }, [customStatement, config.type, drawGeometryPlane, getAutoFramingForExport]);
 
   // Exportar PNG de alta resolución con metadatos de proyecto integrados (Smart PNG)
   const handleExportPNG = async (requestedFileName?: string, variant: 'student' | 'teacher' = 'student') => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     const safeFileName = (requestedFileName || 'geotransform')
       .trim()
       .replace(/\.png$/i, '')
@@ -3194,9 +3589,7 @@ export function Workspace({
       .replace(/\s+/g, '_')
       .slice(0, 100) || 'geotransform';
 
-    const dpr = window.devicePixelRatio || 1;
-    const exportCanvas = document.createElement('canvas');
-    renderExportScene(exportCanvas, variant);
+    const exportCanvas = createExportCanvas(variant);
 
     const projectData: GeoProjectData = {
       appName: 'GeoTransform Pro',
@@ -3207,6 +3600,8 @@ export function Workspace({
       isPolygon,
       config,
       gridStyle,
+      showAxes: toggles.showAxes !== false,
+      showTransformedImage: toggles.showTransformedImage !== false,
       scale,
       pan,
       customStatement,
@@ -3223,7 +3618,7 @@ export function Workspace({
         link.href = url;
         link.click();
         URL.revokeObjectURL(url);
-        showToast(`¡Imagen PNG guardada en versión ${variant === 'teacher' ? 'profesor' : 'alumno'}!`, 'success');
+        showToast(`¡Imagen PNG guardada (${variant === 'teacher' ? 'Profesor' : 'Alumno'})!`, 'success');
       } catch (err) {
         console.error(err);
         const dataUrl = exportCanvas.toDataURL('image/png');
@@ -3246,6 +3641,8 @@ export function Workspace({
       isPolygon,
       config,
       gridStyle,
+      showAxes: toggles.showAxes !== false,
+      showTransformedImage: toggles.showTransformedImage !== false,
       scale,
       pan,
       customStatement,
@@ -3291,6 +3688,12 @@ export function Workspace({
       if (project.gridStyle) {
         setGridStyle(project.gridStyle);
       }
+      if (typeof project.showAxes === 'boolean') {
+        setToggles((prev) => ({ ...prev, showAxes: project.showAxes }));
+      }
+      if (typeof project.showTransformedImage === 'boolean') {
+        setToggles((prev) => ({ ...prev, showTransformedImage: project.showTransformedImage }));
+      }
       if (typeof project.scale === 'number') {
         setScale(project.scale);
       }
@@ -3311,18 +3714,18 @@ export function Workspace({
     }
   };
 
-  // Exportar PDF
+  // Exportar PDF de alta resolución con auto-encuadre perfecto
   const handleExportPDF = (variant: 'student' | 'teacher' = 'student') => {
-    const exportCanvas = document.createElement('canvas');
-    renderExportScene(exportCanvas, variant);
-    const dataUrl = exportCanvas.toDataURL('image/png');
+    const exportCanvas = createExportCanvas(variant);
+    const dataUrl = exportCanvas.toDataURL('image/png', 1.0);
     const pdf = new jsPDF({
-      orientation: exportCanvas.width > exportCanvas.height ? 'landscape' : 'portrait',
+      orientation: 'landscape',
       unit: 'px',
       format: [exportCanvas.width, exportCanvas.height]
     });
     pdf.addImage(dataUrl, 'PNG', 0, 0, exportCanvas.width, exportCanvas.height);
-    pdf.save(`geotransform_${variant}_${config.type}_${Date.now()}.pdf`);
+    const safeType = config.type || 'transform';
+    pdf.save(`geotransform_${variant}_${safeType}_${Date.now()}.pdf`);
     showToast(`¡PDF guardado en versión ${variant === 'teacher' ? 'profesor' : 'alumno'}!`, 'success');
   };
 
@@ -3367,14 +3770,20 @@ export function Workspace({
         activeTool={tool}
         onSelectTool={setTool}
         activeTransformation={config.type}
-        onSelectTransformation={(type) => setConfig((prev) => ({
-          ...prev,
-          type,
-          translationMode: type === 'translation' ? 'points' : prev.translationMode,
-          translationTarget: type === 'translation' ? undefined : prev.translationTarget,
-          translationTargets: type === 'translation' ? [] : prev.translationTargets,
-          translationVectorSet: type === 'translation' ? false : prev.translationVectorSet
-        }))}
+        onSelectTransformation={(type) => {
+          setToggles((prev) => ({ ...prev, showTransformedImage: true }));
+          setConfig((prev) => ({
+            ...prev,
+            type,
+            translationMode: type === 'translation' ? 'points' : prev.translationMode,
+            translationTarget: type === 'translation' ? undefined : prev.translationTarget,
+            translationTargets: type === 'translation' ? [] : prev.translationTargets,
+            translationVectorSet: type === 'translation' ? false : prev.translationVectorSet,
+            rotationSteps: type === 'rotation'
+              ? (prev.rotationSteps?.length ? prev.rotationSteps : [{ angleDeg: prev.angleDeg || 90, direction: prev.direction || 'anticlockwise', center: prev.center || { x: 0, y: 0 } }])
+              : prev.rotationSteps
+          }));
+        }}
         onClearCanvas={handleClearCanvas}
         onOpenPresets={() => setIsPresetsOpen(true)}
         onOpenGuide={() => setIsGuideOpen(true)}
@@ -3553,7 +3962,7 @@ export function Workspace({
           )}
 
           {/* HUD FLOTANTE DE COORDENADAS */}
-          {mouseCoord && (
+          {mouseCoord && toggles.showAxes !== false && (
             <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 flex items-center gap-1.5 rounded-xl bg-surface/90 px-2.5 py-1 shadow-sm backdrop-blur border border-border font-mono text-[11px] sm:text-xs text-ink pointer-events-none">
               <Target className="h-3.5 w-3.5 text-accent" />
               <span>({mouseCoord.x}, {mouseCoord.y})</span>
@@ -3579,22 +3988,60 @@ export function Workspace({
               <ZoomOut className="h-4 w-4" />
             </button>
             <button
-              onClick={() => { setPan({ x: 0, y: 0 }); setScale(38); }}
-              title="Restablecer vista: centra el origen y restablece el zoom"
-              className="p-1.5 sm:p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-ink transition"
+              onClick={handleAutoFitView}
+              title="Centrar y encuadrar figuras automáticamente en la pizarra"
+              className="p-1.5 sm:p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-ink transition cursor-pointer"
             >
               <Target className="h-4 w-4" />
             </button>
             <div className="h-4 w-px bg-border mx-0.5" />
             <button
-              onClick={() =>
-                setGridStyle((prev) => (prev === 'lines' ? 'dots' : prev === 'dots' ? 'axes' : 'lines'))
-              }
-              title={`Estilo de cuadrícula: ${gridStyle}`}
-              className="px-2 py-1 text-xs font-semibold text-ink hover:bg-black/5 dark:hover:bg-white/5 rounded-xl capitalize"
+              onClick={() => {
+                const nextShowAxes = toggles.showAxes === false;
+                setToggles((prev) => ({ ...prev, showAxes: nextShowAxes }));
+                showToast(
+                  nextShowAxes ? 'Ejes cartesianos visibles (X e Y)' : 'Ejes cartesianos ocultos',
+                  'info'
+                );
+              }}
+              title={toggles.showAxes === false ? 'Mostrar ejes cartesianos (X e Y)' : 'Ocultar ejes cartesianos (X e Y)'}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                toggles.showAxes !== false
+                  ? 'bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25'
+                  : 'text-ink-soft hover:bg-black/5 dark:hover:bg-white/5 opacity-70 hover:opacity-100'
+              }`}
             >
-              {gridStyle}
+              <Compass className="h-3.5 w-3.5" />
+              <span>{toggles.showAxes !== false ? 'Ejes ON' : 'Ejes OFF'}</span>
             </button>
+            <button
+              onClick={() =>
+                setGridStyle((prev) => (prev === 'lines' ? 'dots' : prev === 'dots' ? 'none' : 'lines'))
+              }
+              title={`Estilo de cuadrícula: ${gridStyle === 'lines' ? 'Líneas' : gridStyle === 'dots' ? 'Puntos' : 'Sin red'} (Clic para cambiar)`}
+              className="px-2.5 py-1 text-xs font-semibold text-ink hover:bg-black/5 dark:hover:bg-white/5 rounded-xl transition cursor-pointer"
+            >
+              {gridStyle === 'lines' ? 'Líneas' : gridStyle === 'dots' ? 'Puntos' : 'Sin red'}
+            </button>
+            {vertices.length >= 3 && (
+              <>
+                <div className="h-4 w-px bg-border mx-0.5" />
+                <button
+                  onClick={() => handleRotateFigureInPlace(90)}
+                  title="Girar figura 90° antihorario en su lugar (↺)"
+                  className="p-1.5 sm:p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-ink transition cursor-pointer"
+                >
+                  <RotateCcw className="h-4 w-4 text-rose-500" />
+                </button>
+                <button
+                  onClick={() => handleRotateFigureInPlace(-90)}
+                  title="Girar figura 90° horario en su lugar (↻)"
+                  className="p-1.5 sm:p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-ink transition cursor-pointer"
+                >
+                  <RotateCw className="h-4 w-4 text-rose-500" />
+                </button>
+              </>
+            )}
           </div>
 
         </div>
@@ -3688,6 +4135,18 @@ export function Workspace({
                 onUpdateToggles={setToggles}
                 showLabels={showLabels}
                 onToggleLabels={() => setSettings(prev => ({ ...prev, showLabels: !prev.showLabels }))}
+                isDarkMode={isDarkMode}
+                symmetryResult={symmetryResult}
+                showSymmetryAxes={showSymmetryAxes}
+                onToggleShowSymmetryAxes={setShowSymmetryAxes}
+                selectedSymmetryAxisId={selectedSymmetryAxisId}
+                onSelectSymmetryAxisId={setSelectedSymmetryAxisId}
+                onLoadAutoforma={handleLoadAutoforma}
+                activeAutoformaId={activeAutoformaId}
+                onApplyAsReflectionAxis={handleApplyAsReflectionAxis}
+                shapeRotationAngle={shapeRotationAngle}
+                onRotateFigureInPlace={handleRotateFigureInPlace}
+                onOrientFigure={handleOrientFigure}
               />
             </div>
 
@@ -3800,6 +4259,12 @@ export function Workspace({
                           {preset.recommendedFor && (
                             <span className="inline-block text-[10px] uppercase font-bold tracking-wider text-accent bg-accent/10 px-2 py-1 rounded w-full sm:w-fit break-words">
                               Sugerido para {preset.recommendedFor}
+                            </span>
+                          )}
+
+                          {(preset as any).symmetryCount !== undefined && (
+                            <span className="inline-block text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded w-full sm:w-fit break-words">
+                              {(preset as any).isInfinite ? '∞ Ejes de Simetría' : `${(preset as any).symmetryCount} ${(preset as any).symmetryCount === 1 ? 'Eje' : 'Ejes'} de Simetría`}
                             </span>
                           )}
                           
@@ -4082,9 +4547,11 @@ export function Workspace({
       {projectToast && (
         <div
           className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl shadow-2xl border text-xs font-bold animate-in fade-in slide-in-from-bottom-4 duration-200 ${
-            projectToast.type === 'success'
-              ? 'bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 border-border/40 backdrop-blur-md'
-              : 'bg-rose-600 text-white border-rose-500 shadow-rose-900/20'
+            projectToast.type === 'error'
+              ? 'bg-rose-600 text-white border-rose-500 shadow-rose-900/20'
+              : projectToast.type === 'info'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-900/25 backdrop-blur-md'
+                : 'bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 border-border/40 backdrop-blur-md'
           }`}
         >
           {projectToast.type === 'success' ? (

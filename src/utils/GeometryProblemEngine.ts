@@ -1,7 +1,9 @@
 import {
   Point,
   TransformationConfig,
+  RotationStep,
   ConstructionElements,
+  RotationArcConstruction,
   AlgebraicStep,
   ProblemEngineResult,
   ProblemScenario,
@@ -38,6 +40,8 @@ export function solveGeometryProblem(
 ): ProblemEngineResult {
   const transformedVertices: Point[] = [];
   const secondaryTransformedVertices: Point[] = [];
+  const translationStages: Point[][] = [];
+  const rotationStages: Point[][] = [];
   const constructionElements: ConstructionElements = {};
   const algebraicSteps: AlgebraicStep[] = [];
 
@@ -64,7 +68,6 @@ export function solveGeometryProblem(
 
       const vectorGuides = [];
       const translationStageGuides = [];
-      const translationStages = [];
       const isPointPairMode = config.translationMode === 'points';
       const translationTargets = config.translationTargets?.length
         ? config.translationTargets
@@ -344,73 +347,105 @@ export function solveGeometryProblem(
     }
 
     case 'rotation': {
-      const { angleDeg, direction, center } = config;
-      // Sentido antihorario es positivo (+), horario es negativo (-)
-      const effectiveAngle = direction === 'clockwise' ? -Math.abs(angleDeg) : Math.abs(angleDeg);
-      const rad = (effectiveAngle * Math.PI) / 180;
-      const cosA = Math.cos(rad);
-      const sinA = Math.sin(rad);
+      const steps: RotationStep[] = config.rotationSteps && config.rotationSteps.length > 0
+        ? config.rotationSteps
+        : [{ angleDeg: config.angleDeg, direction: config.direction, center: config.center }];
 
-      generalFormula = `P' = C + R_α(P - C), con C(${formatNum(center.x)}, ${formatNum(center.y)}) y α = ${direction === 'clockwise' ? '-' : '+'}${Math.abs(angleDeg)}°`;
+      const isMulti = steps.length > 1;
+
+      generalFormula = isMulti
+        ? `F₀ → F₁ → F₂ → ... (Composición de ${steps.length} rotaciones sucesivas)`
+        : `P' = C + R_α(P - C), con C(${formatNum(config.center.x)}, ${formatNum(config.center.y)}) y α = ${config.direction === 'clockwise' ? '-' : '+'}${Math.abs(config.angleDeg)}°`;
+
       isometryType = 'Isometría Directa (Conserva distancias, ángulos y orientación horaria)';
       invariants = [
-        'Conserva la forma, tamaño y dimensiones de la figura (figura congruente).',
-        'Cada vértice mantiene su distancia fija al centro: d(C, P) = d(C, P\').',
-        'El ángulo formado por el radio inicial CP y el radio final CP\' es exactamente α.',
-        'El único punto que no se mueve durante el giro es el centro C(x₀, y₀).'
+        'Conserva la forma, tamaño y dimensiones de la figura (figura congruente en cada etapa).',
+        isMulti
+          ? 'Cada giro sucesivo conserva la distancia de los vértices a su respectivo centro de rotación.'
+          : 'Cada vértice mantiene su distancia fija al centro: d(C, P) = d(C, P\').',
+        isMulti
+          ? 'La composición de rotaciones sucesivas es una isometría directa en el plano.'
+          : 'El ángulo formado por el radio inicial CP y el radio final CP\' es exactamente α.',
+        'Los vértices describen arcos circulares concéntricos.'
       ];
-      pedagogicalNotes = `Cada vértice describe una trayectoria en arco circular con centro en C y apertura angular de ${Math.abs(angleDeg)}° en sentido ${direction === 'clockwise' ? 'horario' : 'antihorario'}.`;
+      pedagogicalNotes = isMulti
+        ? `Rotaciones encadenadas: cada etapa toma como punto de partida la posición alcanzada en el giro anterior (A ➔ A' ➔ A'' ...).`
+        : `Cada vértice describe una trayectoria en arco circular con centro en C y apertura angular de ${Math.abs(config.angleDeg)}° en sentido ${config.direction === 'clockwise' ? 'horario' : 'antihorario'}.`;
 
-      const rotArcs = [];
+      const rotArcs: RotationArcConstruction[] = [];
+      let currentStage = vertices;
 
-      for (let i = 0; i < vertices.length; i++) {
-        const p = vertices[i];
-        const vName = p.label || String.fromCharCode(65 + i);
+      for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+        const step = steps[stepIndex];
+        const stepCenter = step.center || config.center;
+        const effectiveAngle = step.direction === 'clockwise' ? -Math.abs(step.angleDeg) : Math.abs(step.angleDeg);
+        const rad = (effectiveAngle * Math.PI) / 180;
+        const cosA = Math.cos(rad);
+        const sinA = Math.sin(rad);
 
-        // Algoritmo escolar de 3 pasos:
-        // 1. Trasladar al origen relativo
-        const dx = p.x - center.x;
-        const dy = p.y - center.y;
-        // 2. Rotar
-        const rotX = dx * cosA - dy * sinA;
-        const rotY = dx * sinA + dy * cosA;
-        // 3. Trasladar de vuelta
-        const xPrime = Number((center.x + rotX).toFixed(2));
-        const yPrime = Number((center.y + rotY).toFixed(2));
+        const stageVertices: Point[] = [];
+        const primeSuffix = "'".repeat(stepIndex + 1);
+        const prevSuffix = stepIndex === 0 ? '' : "'".repeat(stepIndex);
 
-        const pPrime: Point = { x: xPrime, y: yPrime, label: `${vName}'` };
-        transformedVertices.push(pPrime);
+        for (let i = 0; i < currentStage.length; i++) {
+          const p = currentStage[i];
+          const baseName = (vertices[i]?.label || String.fromCharCode(65 + i)).replace(/'/g, '');
+          const sourceName = `${baseName}${prevSuffix}`;
+          const targetName = `${baseName}${primeSuffix}`;
 
-        const r = distance(center, p);
-        const startAng = Math.atan2(p.y - center.y, p.x - center.x);
-        const endAng = Math.atan2(yPrime - center.y, xPrime - center.x);
+          // Algoritmo escolar de 3 pasos:
+          // 1. Trasladar al origen relativo
+          const dx = p.x - stepCenter.x;
+          const dy = p.y - stepCenter.y;
+          // 2. Rotar
+          const rotX = dx * cosA - dy * sinA;
+          const rotY = dx * sinA + dy * cosA;
+          // 3. Trasladar de vuelta
+          const xPrime = Number((stepCenter.x + rotX).toFixed(2));
+          const yPrime = Number((stepCenter.y + rotY).toFixed(2));
 
-        rotArcs.push({
-          center,
-          p,
-          pPrime,
-          radius: r,
-          startAngle: startAng,
-          endAngle: endAng,
-          angleDeg: effectiveAngle,
-          counterClockwise: effectiveAngle < 0
-        });
+          const pPrime: Point = { x: xPrime, y: yPrime, label: targetName };
+          stageVertices.push(pPrime);
 
-        // Explicación de tres pasos para cuaderno
-        algebraicSteps.push({
-          vertexName: vName,
-          originalPoint: p,
-          targetPoint: pPrime,
-          formula: `x' = x₀ + (x - x₀)cosα - (y - y₀)sinα\ny' = y₀ + (x - x₀)sinα + (y - y₀)cosα`,
-          substitutionLines: [
-            `Paso 1 (Origen relativo): Δx = ${formatNum(p.x)} - (${formatNum(center.x)}) = ${formatNum(dx)},  Δy = ${formatNum(p.y)} - (${formatNum(center.y)}) = ${formatNum(dy)}`,
-            `Paso 2 (Rotar con cos=${formatNum(cosA)}, sin=${formatNum(sinA)}): x_rot = ${formatNum(dx)}·(${formatNum(cosA)}) - ${formatNum(dy)}·(${formatNum(sinA)}) = ${formatNum(rotX)},  y_rot = ${formatNum(dx)}·(${formatNum(sinA)}) + ${formatNum(dy)}·(${formatNum(cosA)}) = ${formatNum(rotY)}`,
-            `Paso 3 (Volver a centro): x' = ${formatNum(center.x)} + (${formatNum(rotX)}) = ${formatNum(xPrime)},  y' = ${formatNum(center.y)} + (${formatNum(rotY)}) = ${formatNum(yPrime)}`
-          ],
-          resultLine: `${vName}'(${formatNum(xPrime)}, ${formatNum(yPrime)})`
-        });
+          const r = distance(stepCenter, p);
+          const startAng = Math.atan2(p.y - stepCenter.y, p.x - stepCenter.x);
+          const endAng = Math.atan2(yPrime - stepCenter.y, xPrime - stepCenter.x);
+
+          rotArcs.push({
+            center: stepCenter,
+            p,
+            pPrime,
+            radius: r,
+            startAngle: startAng,
+            endAngle: endAng,
+            angleDeg: effectiveAngle,
+            counterClockwise: effectiveAngle > 0,
+            stepIndex
+          });
+
+          algebraicSteps.push({
+            vertexName: isMulti ? `Giro ${stepIndex + 1}: ${sourceName} → ${targetName}` : sourceName,
+            originalPoint: p,
+            targetPoint: pPrime,
+            formula: `x' = x₀ + (x - x₀)cosα - (y - y₀)sinα\ny' = y₀ + (x - x₀)sinα + (y - y₀)cosα  [α = ${step.direction === 'clockwise' ? '-' : '+'}${Math.abs(step.angleDeg)}°]`,
+            substitutionLines: [
+              `Paso 1 (Origen relativo a C(${formatNum(stepCenter.x)}, ${formatNum(stepCenter.y)})): Δx = ${formatNum(p.x)} - (${formatNum(stepCenter.x)}) = ${formatNum(dx)},  Δy = ${formatNum(p.y)} - (${formatNum(stepCenter.y)}) = ${formatNum(dy)}`,
+              `Paso 2 (Rotar con cos=${formatNum(cosA)}, sin=${formatNum(sinA)}): x_rot = ${formatNum(dx)}·(${formatNum(cosA)}) - ${formatNum(dy)}·(${formatNum(sinA)}) = ${formatNum(rotX)},  y_rot = ${formatNum(dx)}·(${formatNum(sinA)}) + ${formatNum(dy)}·(${formatNum(cosA)}) = ${formatNum(rotY)}`,
+              `Paso 3 (Volver a centro): x' = ${formatNum(stepCenter.x)} + (${formatNum(rotX)}) = ${formatNum(xPrime)},  y' = ${formatNum(stepCenter.y)} + (${formatNum(rotY)}) = ${formatNum(yPrime)}`
+            ],
+            resultLine: `${targetName}(${formatNum(xPrime)}, ${formatNum(yPrime)})`
+          });
+        }
+
+        rotationStages.push(stageVertices);
+        currentStage = stageVertices;
       }
 
+      const finalStage = rotationStages[rotationStages.length - 1] || [];
+      transformedVertices.push(...finalStage);
+      if (rotationStages.length > 1) {
+        secondaryTransformedVertices.push(...rotationStages[0]);
+      }
       constructionElements.rotationArcs = rotArcs;
       break;
     }
@@ -475,6 +510,8 @@ export function solveGeometryProblem(
   return {
     transformedVertices,
     secondaryTransformedVertices,
+    translationStages,
+    rotationStages,
     constructionElements,
     algebraicSteps,
     generalFormula,

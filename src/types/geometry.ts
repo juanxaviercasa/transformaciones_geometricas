@@ -5,7 +5,7 @@ export interface Point {
   color?: string;
 }
 
-export type GridStyle = 'lines' | 'dots' | 'axes';
+export type GridStyle = 'lines' | 'dots' | 'axes' | 'none';
 
 export type ToolMode = 'select' | 'pan' | 'point' | 'segment' | 'polygon' | 'draw' | 'pivot';
 
@@ -83,9 +83,16 @@ export interface TransformationConfig {
   angleDeg: number;
   direction: 'anticlockwise' | 'clockwise';
   center: Point; // C(x0, y0)
+  rotationSteps?: RotationStep[];
   // Homotecia
   scaleFactor: number; // k
   homothetyCenter: Point; // O(x0, y0)
+}
+
+export interface RotationStep {
+  angleDeg: number;
+  direction: 'anticlockwise' | 'clockwise';
+  center?: Point;
 }
 
 export interface VectorDecomposition {
@@ -112,6 +119,7 @@ export interface RotationArcConstruction {
   endAngle: number;
   angleDeg: number;
   counterClockwise: boolean;
+  stepIndex?: number;
 }
 
 export interface HomothetyRayConstruction {
@@ -150,6 +158,7 @@ export interface ProblemEngineResult {
   transformedVertices: Point[];
   secondaryTransformedVertices?: Point[];
   translationStages?: Point[][];
+  rotationStages?: Point[][];
   constructionElements: ConstructionElements;
   algebraicSteps: AlgebraicStep[];
   generalFormula: string;
@@ -184,6 +193,8 @@ export interface ClassroomToggles {
   showConstructionGuides: boolean;
   showReflectionDistances: boolean;
   showPoints: boolean;
+  showAxes?: boolean;
+  showTransformedImage?: boolean;
   showAlgebraicNotebook: boolean;
   cleanBoardMode: boolean;
 }
@@ -198,6 +209,8 @@ export interface GeoProjectData {
   isPolygon: boolean;
   config: TransformationConfig;
   gridStyle?: GridStyle;
+  showAxes?: boolean;
+  showTransformedImage?: boolean;
   scale?: number;
   pan?: { x: number; y: number };
   customStatement?: string;

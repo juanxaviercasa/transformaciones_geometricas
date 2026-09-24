@@ -1,4 +1,5 @@
 import { Point, TransformationConfig, PolygonPreset } from '../types/geometry';
+import { WORD_AUTOFORMAS } from './symmetryAnalyzer';
 
 /**
  * Aplica una transformación geométrica completa a un punto (x, y)
@@ -176,6 +177,7 @@ export function interpolateVertices(vertices: Point[], config: TransformationCon
  * Figuras geométricas prediseñadas para uso pedagógico inmediato
  */
 export const SHAPE_PRESETS: PolygonPreset[] = [
+  ...WORD_AUTOFORMAS,
   {
     id: 'triangle_scalene',
     name: 'Triángulo Escaleno',
